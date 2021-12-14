@@ -1,10 +1,10 @@
 {
-  "name": "@paulrberg/solidity-template",
-  "description": "Template for writing Solidity smart contracts",
+  "name": "@jonasms/revenuesplitter",
+  "description": "Base contract + extension contracts for splitting revenues",
   "version": "1.0.0",
   "author": {
-    "name": "Paul Razvan Berg",
-    "url": "https://paulrberg.com"
+    "name": "Jonas Sota",
+    "url": "https://jonassota.com"
   },
   "devDependencies": {
     "@codechecks/client": "^0.1.12",
