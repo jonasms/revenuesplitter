@@ -1,114 +1,33 @@
-# Solidity Template
+# Mainnet Project
 
-My favorite setup for writing Solidity smart contracts.
+**Estimated timeline:** 1 - 2 weeks
 
-- [Hardhat](https://github.com/nomiclabs/hardhat): compile and run the smart contracts on a local development network
-- [TypeChain](https://github.com/ethereum-ts/TypeChain): generate TypeScript types for smart contracts
-- [Ethers](https://github.com/ethers-io/ethers.js/): renowned Ethereum library and wallet implementation
-- [Waffle](https://github.com/EthWorks/Waffle): tooling for writing comprehensive smart contract tests
-- [Solhint](https://github.com/protofire/solhint): linter
-- [Solcover](https://github.com/sc-forks/solidity-coverage): code coverage
-- [Prettier Plugin Solidity](https://github.com/prettier-solidity/prettier-plugin-solidity): code formatter
+## Description
 
-This is a GitHub template, which means you can reuse it as many times as you want. You can do that by clicking the "Use this
-template" button at the top of the page.
+A smart contract for collective ownership of an asset and distribution of profits of said asset.
 
-## Usage
+The contract has a guardian account with special privileges to execute arbitrary transactions for the contract.
 
-### Pre Requisites
+The purpose of this feature is to enable the contract to invest collected revenues and liquidate said investments in order to make the funds available for withdraw.
 
-Before running any command, you need to create a `.env` file and set a BIP-39 compatible mnemonic as an environment
-variable. Follow the example in `.env.example`. If you don't already have a mnemonic, use this [website](https://iancoleman.io/bip39/) to generate one.
+The given asset can be digital, physical, intellectual, etc.
 
-Then, proceed with installing dependencies:
+In the event the asset is on-chain, the contract's guardian can make the contract the owner of the asset.
 
-```sh
-yarn install
-```
+## Features
 
-### Compile
+1. The contract is ERC20 compliant and provides tokens that represent shares of the given asset. Users can purchase and transfer tokens.
+2. The contract's guardian can execute arbitrary transactions.
+3. Collected revenues are made available to token owners for withdrawl, according to a schedule, via a `withdraw()` method.
+   - Users can withdraw funds from the most recently closed collection period according to their share of tokens.
+4. Deploy the contract on Arbitrum Mainnet.
+5. Write an extensible base contract and then extend it with one of the following
+   i. A proposal system for buying/selling assets.
+   ii. A multisig for buying/selling assets.
+   iii. A white list implemented with a merkle tree.
+   iv. A way to to track revenue events on-chain, such as a streaming service reporting a number of streams, or a 3rd party reporting the use of a rented NFT
+   v. Compensate token holders not only based on the number of tokens they hold, but also for the portion of the given collection period those tokens were owned for
 
-Compile the smart contracts with Hardhat:
+## External Dependencies
 
-```sh
-$ yarn compile
-```
-
-### TypeChain
-
-Compile the smart contracts and generate TypeChain artifacts:
-
-```sh
-$ yarn typechain
-```
-
-### Lint Solidity
-
-Lint the Solidity code:
-
-```sh
-$ yarn lint:sol
-```
-
-### Lint TypeScript
-
-Lint the TypeScript code:
-
-```sh
-$ yarn lint:ts
-```
-
-### Test
-
-Run the Mocha tests:
-
-```sh
-$ yarn test
-```
-
-### Coverage
-
-Generate the code coverage report:
-
-```sh
-$ yarn coverage
-```
-
-### Report Gas
-
-See the gas usage per unit test and average gas per method call:
-
-```sh
-$ REPORT_GAS=true yarn test
-```
-
-### Clean
-
-Delete the smart contract artifacts, the coverage reports and the Hardhat cache:
-
-```sh
-$ yarn clean
-```
-
-### Deploy
-
-Deploy the contracts to Hardhat Network:
-
-```sh
-$ yarn deploy --greeting "Bonjour, le monde!"
-```
-
-## Syntax Highlighting
-
-If you use VSCode, you can enjoy syntax highlighting for your Solidity code via the
-[vscode-solidity](https://github.com/juanfranblanco/vscode-solidity) extension. The recommended approach to set the
-compiler version is to add the following fields to your VSCode user settings:
-
-```json
-{
-  "solidity.compileUsingRemoteVersion": "v0.8.4+commit.c7e474f2",
-  "solidity.defaultCompiler": "remote"
-}
-```
-
-Where of course `v0.8.4+commit.c7e474f2` can be replaced with any other version.
+1. Arbitrum
