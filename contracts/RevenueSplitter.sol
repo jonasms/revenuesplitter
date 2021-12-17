@@ -4,72 +4,94 @@ pragma solidity >=0.8.4;
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract RevenueSplitter is ERC20 {
+import "./interfaces/IRevenueSplitter.sol";
+
+contract RevenueSplitter is ERC20, IRevenueSplitter {
     address guardian;
 
-    /**
-        An extensible base contract for receiving and splitting revenues.
+    // track funds collected in curPeriodFunds
+    // set curPeriodFunds to lastPeriodFunds
 
-        The base contract:
-            - is an ERC20 token
-            - can queue and execute arbitrary calls, ostensibly for investing and liquidating funds
-                - can be customized by an extending contract (i.e. requirements, such as a threshold of positive votes)
-                - queued proposals can be executed by anyone once they reach their eta
-            - has a mechanism by which token owners can withdraw
-                - by default, can withdraw according to their share of the totalTokens owned
-                - needs to be a way to reset the withdraw period
+    uint256 curLiquidityPer;
 
-        [Extension contract]
-            - has a schedule by which funds are made available for withdrawl
+    struct Receipt {
+        address from;
+        uint256 date;
+        uint256 amount;
+    }
 
+    struct RevenuePeriod {
+        // TODO data packing?
+        uint256 date;
+        uint256 revenue;
+        uint256 totalSupplyUnvested;
+        mapping(address => uint256) balanceOfUnvested;
 
-    
-     */
+        // mapping(address => Receipt) balanceOfLocked;
+        // Receipt[] receipts;
+    }
 
-    constructor(address guardian_) ERC20("Test", "TST") {
+    RevenuePeriod[] private revenuePeriods;
+
+    constructor(
+        address guardian_,
+        string memory name_,
+        string memory symbol_
+    ) ERC20(name_, symbol_) {
         guardian = guardian_;
     }
 
-    function deposit() external payable {
-        deposit(msg.sender);
-    }
+    // function _deposit(address to_) internal virtual {
+    //     // calculate tokens to transfer given ETH received
+    //     // _mint tokens to sender
+    // }
 
-    function deposit(address to_) public payable {
-        // calculate tokens to transfer given ETH received
-        // _mint tokens to sender
-    }
+    // function deposit() external payable virtual {
+    //     _deposit(msg.sender);
+    // }
 
     // function queue()
 
-    function _execute(bytes calldata data_) internal virtual {
-        require(msg.sender == guardian, "RevenueSharing::execute: GUARDIAN_ONLY");
-        // execute call
-        // return call result
-    }
+    // function _execute(bytes calldata data_) internal virtual {
+    //     require(msg.sender == guardian, "RevenueSharing::execute: GUARDIAN_ONLY");
+    //     // don't allow calling own contract
+    //     // execute call
+    //     // return call result
+    // }
 
-    function execute(bytes calldata data_) external {
-        _beforeExecute(data_);
+    // function execute(bytes calldata data_) external override {
+    //     _beforeExecute(data_);
 
-        // TODO throw on call failure?
-        _execute(data_);
+    //     // TODO throw on call failure?
+    //     _execute(data_);
 
-        _afterExecute(data_);
-    }
+    //     _afterExecute(data_);
+    // }
 
-    // function withdraw()
-    // function withdraw(address receiver_)
-    // _beforeWithdraw(address receiver_, uint amount_) + _afterWithdraw(address receiver_, uint amount_)
+    // // function withdraw()
+    // // function withdraw(address receiver_)
+    // // function _withdraw(address account_) internal virtual
+    // // _beforeWithdraw(address receiver_, uint amount_) + _afterWithdraw(address receiver_, uint amount_)
 
     receive() external payable {
+        _onReceive();
         emit PaymentReceived(msg.sender, msg.value);
     }
 
-    // setGuardian()
+    // // setGuardian()
 
-    /* HOOKS */
-    function _beforeExecute(bytes calldata data_) internal virtual {}
+    // /* HOOKS */
+    // function _beforeExecute(bytes calldata data_) internal virtual {
+    //     console.log("PLACEHOLDER");
+    // }
 
-    function _afterExecute(bytes calldata data_) internal virtual {}
+    // function _afterExecute(bytes calldata data_) internal virtual {
+    //     console.log("PLACEHOLDER");
+    // }
 
-    event PaymentReceived(address, uint256);
+    function _onReceive() internal virtual {
+        console.log("PLACEHOLDER");
+    }
+
+    // event PaymentReceived(address, uint256);
 }
