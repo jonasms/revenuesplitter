@@ -8,12 +8,10 @@ contract RevenuePool is RevenueSplitter {
     uint256 private constant MAX_TOKEN_SUPPLY = 100 ether;
 
     constructor(
-        address guardian_,
+        address owner,
         string memory name_,
         string memory symbol_
-    ) RevenueSplitter(guardian_, name_, symbol_) {
-        guardian = guardian_;
-    }
+    ) RevenueSplitter(owner, name_, symbol_) {}
 
     function purchase() external payable {
         require(totalSupply() + msg.value <= MAX_TOKEN_SUPPLY, "");
