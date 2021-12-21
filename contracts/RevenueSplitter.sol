@@ -22,12 +22,6 @@ contract RevenueSplitter is ERC20 {
 
     uint256 curLiquidityPer;
 
-    struct Receipt {
-        address from;
-        uint256 date;
-        uint256 amount;
-    }
-
     struct RevenuePeriod {
         // TODO data packing?
         uint256 date;
@@ -39,20 +33,18 @@ contract RevenueSplitter is ERC20 {
     struct UnvestedShare {
         uint256 date;
         uint256 balance;
+        bool exercised;
     }
 
-    mapping(address => UnvestedShare[]) unvestedShares;
+    mapping(address => UnvestedShare[]) private vestableShares;
 
-    uint256 curRevenuePeriodDate;
-    uint256 curRevenuePeriodRevenue;
-    uint256 curRevenuePeriodTotalSupply;
+    uint256 public curRevenuePeriodDate;
+    uint256 private curRevenuePeriodRevenue;
+    uint256 private curRevenuePeriodTotalSupply;
 
-    uint256 lastRevenuePeriodDate;
-    uint256 lastRevenuePeriodRevenue;
-    uint256 lastRevenuePeriodTotalSupply;
-
-    // RevenuePeriod curRevenuePeriod;
-    // RevenuePeriod lastRevenuePeriod;
+    uint256 private lastRevenuePeriodDate;
+    uint256 private lastRevenuePeriodRevenue;
+    uint256 private lastRevenuePeriodTotalSupply;
 
     constructor(
         address owner_,
@@ -63,17 +55,43 @@ contract RevenueSplitter is ERC20 {
         curRevenuePeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
     }
 
-    function _getVestableShares(address shareholder_) internal view returns (UnvestedShare[] memory vestableShares) {
-        UnvestedShare[] memory _unvestedShares = unvestedShares[shareholder_];
+    function _getVestableSharesCount(address shareholder_, bool exercise)
+        internal
+        view
+        returns (uint256 vestableSharesCount)
+    {
+        UnvestedShare[] memory _vestableShares = vestableShares[shareholder_];
         UnvestedShare memory curShare;
-        for (uint256 i = 0; i < _unvestedShares.length - 1; i++) {
+        for (uint256 i = 0; i < _vestableShares.length - 1; i++) {
             // TODO scrutinize gas optimization here
-            curShare = _unvestedShares[i];
+            curShare = _vestableShares[i];
 
-            if (curShare.date >= curRevenuePeriodDate) {
-                vestableShares[i] = curShare;
+            if (curShare.date >= curRevenuePeriodDate && !curShare.exercised) {
+                vestableSharesCount += curShare.balance;
+
+                if (exercise) {
+                    _vestableShares[i].exercised = true;
+                }
             }
         }
+    }
+
+    function getVestableSharesCount() public view returns (uint256) {
+        return _getVestableSharesCount(msg.sender, false);
+    }
+
+    // function _mintUnvested
+    /**
+        TESTS
+            1. Can redeem vested but un-exercised shares once
+            2. Returns the numbers of tokens minted
+     */
+    function redeem() public returns (uint256 vestablSharesCount) {
+        vestablSharesCount = _getVestableSharesCount(msg.sender, true);
+
+        require(vestablSharesCount > 0, "RevenueSplitter::redeem: ZERO_VESTABLE_SHARES");
+
+        _mint(msg.sender, vestablSharesCount);
     }
 
     function _setCurRevenuePeriod(
@@ -96,10 +114,11 @@ contract RevenueSplitter is ERC20 {
         lastRevenuePeriodTotalSupply = totalSupply_;
     }
 
-    function getVestableShares() public view returns (UnvestedShare[] memory) {
-        return _getVestableShares(msg.sender);
-    }
-
+    /**
+        TESTING
+            1. Fxn reverts if the current period is currently in progress
+            2. Fxn sets `lastRevenuePeriod` and creates a new `curRevenuePeriod`
+     */
     function endRevenuePeriod() public {
         // RevenuePeriod _curRevenuePeriod = curRevenuePeriod;
         require(
@@ -109,20 +128,16 @@ contract RevenueSplitter is ERC20 {
 
         _beforeEndRevenuePeriod();
 
+        // TODO what is this supposed to be doing?
         if (lastRevenuePeriodDate > 0) {
             _mint(address(this), curRevenuePeriodTotalSupply);
         }
 
-        // set lastRevenuePeriod to curRevenuePeriod
         _setLastRevenuePeriod(curRevenuePeriodDate, curRevenuePeriodRevenue, curRevenuePeriodTotalSupply);
-
-        // create new revenue period
         _setCurRevenuePeriod(block.timestamp + REVENUE_PERIOD_DURATION, 0, 0);
 
         _afterEndRevenuePeriod();
     }
-
-    function _endRevenuePeriod() internal virtual {}
 
     // function _deposit(address to_) internal virtual {
     //     // calculate tokens to transfer given ETH received
