@@ -2,12 +2,14 @@
 pragma solidity >=0.8.4;
 
 import "hardhat/console.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 
 import "./interfaces/IRevenueSplitter.sol";
 
-contract RevenueSplitter is ERC20 {
-    uint256 private constant REVENUE_PERIOD_DURATION = 90 days;
+contract RevenueSplitter is ERC1155 {
+    uint256 public constant REVENUE_PERIOD_DURATION = 90 days;
+    uint256 public constant TOKEN = 1;
+    uint256 public constant TOKEN_OPTION = 2;
 
     /**
         Used to give users a period of time to vest unvested tokens
@@ -26,8 +28,8 @@ contract RevenueSplitter is ERC20 {
         // TODO data packing?
         uint256 date;
         uint256 revenue;
-        uint256 totalSupplyUnvested;
-        mapping(address => uint256) balanceOfUnvested;
+        uint256 totalSupplyUnvested; // TODO being used?
+        mapping(address => uint256) balanceOfUnvested; // TODO being used?
     }
 
     struct TokenPurchase {
@@ -38,6 +40,7 @@ contract RevenueSplitter is ERC20 {
 
     mapping(address => TokenPurchase[]) private _tokenPurchases;
     mapping(address => uint256) private _balanceOfUnexercised;
+    uint256 private _totalSupplyUnexercised; // TODO expose?
 
     uint256 public curRevenuePeriodDate;
     uint256 private curRevenuePeriodRevenue;
@@ -47,20 +50,10 @@ contract RevenueSplitter is ERC20 {
     uint256 private lastRevenuePeriodRevenue;
     uint256 private lastRevenuePeriodTotalSupply;
 
-    constructor(
-        address owner_,
-        string memory name_,
-        string memory symbol_
-    ) ERC20(name_, symbol_) {
+    constructor(address owner_, string memory uri_) ERC1155(uri_) {
         owner = owner_;
         curRevenuePeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
     }
-
-    function balanceOfUnexercised() public view returns (uint256) {
-        return _balanceOfUnexercised[msg.sender];
-    }
-
-    // function _mintUnvested
 
     /**
         TESTS
@@ -81,8 +74,11 @@ contract RevenueSplitter is ERC20 {
 
         require(exercisedTokensCount > 0, "RevenueSplitter::redeem: ZERO_VESTABLE_SHARES");
 
-        _balanceOfUnexercised[msg.sender] -= exercisedTokensCount;
-        _mint(msg.sender, exercisedTokensCount);
+        _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount);
+        _mint(msg.sender, TOKEN, exercisedTokensCount, "");
+
+        // _balanceOfUnexercised[msg.sender] -= exercisedTokensCount; // TODO use `burnUnexercised`
+        // _mint(msg.sender, exercisedTokensCount);
 
         // TODO emit Redeem event
     }
@@ -123,7 +119,7 @@ contract RevenueSplitter is ERC20 {
 
         // TODO what is this supposed to be doing?
         if (lastRevenuePeriodDate > 0) {
-            _mint(address(this), curRevenuePeriodTotalSupply);
+            _mint(address(this), TOKEN, curRevenuePeriodTotalSupply, "");
         }
 
         _setLastRevenuePeriod(curRevenuePeriodDate, curRevenuePeriodRevenue, curRevenuePeriodTotalSupply);
@@ -172,6 +168,10 @@ contract RevenueSplitter is ERC20 {
     // // setGuardian()
 
     // /* HOOKS */
+    function _beforeTokenUnexercisedTransfer() internal virtual {}
+
+    function _afterTokenUnexercisedTransfer() internal virtual {}
+
     function _beforeEndRevenuePeriod() internal virtual {}
 
     function _afterEndRevenuePeriod() internal virtual {}
