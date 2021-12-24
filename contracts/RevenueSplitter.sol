@@ -30,13 +30,14 @@ contract RevenueSplitter is ERC20 {
         mapping(address => uint256) balanceOfUnvested;
     }
 
-    struct UnvestedShare {
+    struct TokenPurchase {
         uint256 date;
         uint256 balance;
         bool exercised;
     }
 
-    mapping(address => UnvestedShare[]) private vestableShares;
+    mapping(address => TokenPurchase[]) private _tokenPurchases;
+    mapping(address => uint256) private _balanceOfUnexercised;
 
     uint256 public curRevenuePeriodDate;
     uint256 private curRevenuePeriodRevenue;
@@ -55,43 +56,35 @@ contract RevenueSplitter is ERC20 {
         curRevenuePeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
     }
 
-    function _getVestableSharesCount(address shareholder_, bool exercise)
-        internal
-        view
-        returns (uint256 vestableSharesCount)
-    {
-        UnvestedShare[] memory _vestableShares = vestableShares[shareholder_];
-        UnvestedShare memory curShare;
-        for (uint256 i = 0; i < _vestableShares.length - 1; i++) {
-            // TODO scrutinize gas optimization here
-            curShare = _vestableShares[i];
-
-            if (curShare.date >= curRevenuePeriodDate && !curShare.exercised) {
-                vestableSharesCount += curShare.balance;
-
-                if (exercise) {
-                    _vestableShares[i].exercised = true;
-                }
-            }
-        }
-    }
-
-    function getVestableSharesCount() public view returns (uint256) {
-        return _getVestableSharesCount(msg.sender, false);
+    function balanceOfUnexercised() public view returns (uint256) {
+        return _balanceOfUnexercised[msg.sender];
     }
 
     // function _mintUnvested
+
     /**
         TESTS
-            1. Can redeem vested but un-exercised shares once
+            1. Can redeem vested AND un-exercised shares once
             2. Returns the numbers of tokens minted
      */
-    function redeem() public returns (uint256 vestablSharesCount) {
-        vestablSharesCount = _getVestableSharesCount(msg.sender, true);
+    function redeem() public returns (uint256 exercisedTokensCount) {
+        // exercisedTokensCount = _getVestableSharesCount(msg.sender, true);
 
-        require(vestablSharesCount > 0, "RevenueSplitter::redeem: ZERO_VESTABLE_SHARES");
+        // Exercise vested tokens
+        TokenPurchase[] storage tokenPurchases = _tokenPurchases[msg.sender];
+        for (uint256 i = 0; i < tokenPurchases.length - 1; i++) {
+            if (tokenPurchases[i].date >= curRevenuePeriodDate && !tokenPurchases[i].exercised) {
+                tokenPurchases[i].exercised = true;
+                exercisedTokensCount += tokenPurchases[i].balance;
+            }
+        }
 
-        _mint(msg.sender, vestablSharesCount);
+        require(exercisedTokensCount > 0, "RevenueSplitter::redeem: ZERO_VESTABLE_SHARES");
+
+        _balanceOfUnexercised[msg.sender] -= exercisedTokensCount;
+        _mint(msg.sender, exercisedTokensCount);
+
+        // TODO emit Redeem event
     }
 
     function _setCurRevenuePeriod(
