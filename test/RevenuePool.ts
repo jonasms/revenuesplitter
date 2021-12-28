@@ -24,6 +24,13 @@ const purchaseTokens = async (pool: RevenuePool, accounts: SignerWithAddress[], 
   }
 };
 
+const jumpLiquidityPeriods = async (pool: RevenuePool, n: number) => {
+  for (let i = 0; i < n; i++) {
+    await network.provider.send("evm_increaseTime", [LIQUIDITY_PERIOD + ONE_DAY]);
+    await pool.endRevenuePeriod();
+  }
+};
+
 describe("Unit Tests Tests", () => {
   let pool: RevenuePool;
   let signers: SignerWithAddress[];
@@ -36,10 +43,6 @@ describe("Unit Tests Tests", () => {
   });
 
   describe("RevenuePool", () => {
-    before(async () => {
-      // await network.provider.send("evm_mine", [LIQUIDITY_PERIOD + ONE_DAY]);
-    });
-
     beforeEach(async () => {
       const revenuePoolArtifact: Artifact = await artifacts.readArtifact("RevenuePool");
       pool = <RevenuePool>(
@@ -60,8 +63,7 @@ describe("Unit Tests Tests", () => {
 
       it("Should purchase token shares after the first liquidity period", async () => {
         // jump to 2nd liquidity period
-        await network.provider.send("evm_increaseTime", [LIQUIDITY_PERIOD + ONE_DAY]);
-        await pool.endRevenuePeriod();
+        await jumpLiquidityPeriods(pool, 1);
 
         await pool.connect(account1).deposit({ value: TWO_ETH });
 
@@ -75,31 +77,47 @@ describe("Unit Tests Tests", () => {
     });
 
     describe("redeem", () => {
-      beforeEach(async () => {
-        // jump to 2nd liquidity period
-        await network.provider.send("evm_increaseTime", [LIQUIDITY_PERIOD + ONE_DAY]);
-        await pool.endRevenuePeriod();
+      // beforeEach(async () => {
+      // });
 
-        // purchase token shares
-        await purchaseTokens(pool, signers, TWO_ETH);
+      it("Should fail if options haven't been purchased", async () => {
+        await expect(pool.connect(account1).redeem()).to.be.revertedWith(
+          "RevenueSplitter::redeem: ZERO_TOKEN_PURCHASES",
+        );
       });
+
+      it("Should fail if options haven't vested yet", async () => {
+        // jump to 2nd liquidity period
+        await jumpLiquidityPeriods(pool, 1);
+
+        // purchase token options
+        await purchaseTokens(pool, signers, TWO_ETH);
+
+        await expect(pool.connect(account1).redeem()).to.be.revertedWith(
+          "RevenueSplitter::redeem: ZERO_EXERCISABLE_SHARES",
+        );
+      });
+
       // Should only exercise unexercised vested tokens
       it("Should only exercise unexercised vested tokens", async () => {
-        // jump to 3rd liquidity period.
-        // purchased token shares can be exercised
-        await network.provider.send("evm_increaseTime", [LIQUIDITY_PERIOD + ONE_DAY]);
+        // jump to 2nd liquidity period
+        await jumpLiquidityPeriods(pool, 1);
+
+        // purchase token options
+        await purchaseTokens(pool, signers, TWO_ETH);
+
+        // jump to 4th liquidity period
+        // where purchased token shares can be exercised
+        await jumpLiquidityPeriods(pool, 2);
 
         let balances: BigNumber[];
         balances = await pool.balanceOfBatch([account1.address, account1.address], [TOKEN_ID, TOKEN_OPTION_ID]);
-        console.log("FETCHED BALANCES BEFORE REDEMPTION");
         expect(balances[0]).to.equal(ZERO_ETH);
         expect(balances[1]).to.equal(TWO_ETH);
 
-        // redeem
         await pool.connect(account1).redeem();
 
         balances = await pool.balanceOfBatch([account1.address, account1.address], [TOKEN_ID, TOKEN_OPTION_ID]);
-        console.log("FETCHED BALANCES AFTER REDEMPTION");
         expect(balances[0]).to.equal(TWO_ETH);
         expect(balances[1]).to.equal(ZERO_ETH);
       });

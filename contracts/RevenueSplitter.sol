@@ -25,6 +25,7 @@ contract RevenueSplitter is ERC1155 {
 
     uint256 curLiquidityPer;
 
+    // TODO using
     struct RevenuePeriod {
         // TODO data packing?
         uint256 date;
@@ -34,7 +35,8 @@ contract RevenueSplitter is ERC1155 {
     }
 
     struct TokenPurchase {
-        uint256 date;
+        // TODO data packing?
+        uint256 vestingPeriod;
         uint256 balance;
         bool exercised;
     }
@@ -43,6 +45,7 @@ contract RevenueSplitter is ERC1155 {
     mapping(address => uint256) private _balanceOfUnexercised; // TODO remove
     uint256 private _totalSupplyUnexercised; // TODO expose?
 
+    uint256 private curRevenuePeriodId;
     uint256 public curRevenuePeriodDate;
     uint256 private curRevenuePeriodRevenue;
     uint256 private curRevenuePeriodTotalSupply;
@@ -57,7 +60,7 @@ contract RevenueSplitter is ERC1155 {
     }
 
     // GETTERS
-    // tokenPurchases
+    // tokenPurchases ?
 
     /**
         TESTS
@@ -70,48 +73,56 @@ contract RevenueSplitter is ERC1155 {
 
         require(tokenPurchases.length > 0, "RevenueSplitter::redeem: ZERO_TOKEN_PURCHASES");
 
-        for (uint256 i = 0; i < tokenPurchases.length - 1; i++) {
-            // console.log("EXERCISED TOKEN COUNT: ", exercisedTokensCount);
-            if (tokenPurchases[i].date >= curRevenuePeriodDate && !tokenPurchases[i].exercised) {
+        for (uint256 i = 0; i < tokenPurchases.length; i++) {
+            if (tokenPurchases[i].vestingPeriod <= curRevenuePeriodId && !tokenPurchases[i].exercised) {
                 tokenPurchases[i].exercised = true;
                 exercisedTokensCount += tokenPurchases[i].balance;
             }
         }
 
-        require(exercisedTokensCount > 0, "RevenueSplitter::redeem: ZERO_VESTABLE_SHARES");
+        require(exercisedTokensCount > 0, "RevenueSplitter::redeem: ZERO_EXERCISABLE_SHARES");
 
-        console.log("TOKEN PURCHASE BALANCE: ", exercisedTokensCount);
         _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount);
         _mint(msg.sender, TOKEN, exercisedTokensCount, "");
-
-        // _balanceOfUnexercised[msg.sender] -= exercisedTokensCount; // TODO use `burnUnexercised`
-        // _mint(msg.sender, exercisedTokensCount);
 
         // TODO emit Redeem event
     }
 
     function _addTokenPurchase(
         address addr_,
-        uint256 date_,
+        uint256 vestingPeriod_,
         uint256 balance_
     ) internal {
-        _tokenPurchases[addr_].push(TokenPurchase(date_, balance_, false));
+        _tokenPurchases[addr_].push(TokenPurchase(vestingPeriod_, balance_, false));
     }
 
-    function _beforeTokenTransfer(
-        address,
-        address,
+    function _mint(
         address to_,
-        uint256[] memory ids_,
-        uint256[] memory amounts_,
-        bytes memory
+        uint256 id_,
+        uint256 amount_,
+        bytes memory data_
     ) internal virtual override {
-        for (uint256 i = 0; i < ids_.length; i++) {
-            if (ids_[i] == TOKEN_OPTION) {
-                _addTokenPurchase(to_, block.timestamp, amounts_[i]);
-            }
+        if (id_ == TOKEN_OPTION) {
+            _addTokenPurchase(to_, curRevenuePeriodId + 2, amount_);
         }
+
+        super._mint(to_, id_, amount_, data_);
     }
+
+    // function _beforeTokenTransfer(
+    //     address,
+    //     address,
+    //     address to_,
+    //     uint256[] memory ids_,
+    //     uint256[] memory amounts_,
+    //     bytes memory
+    // ) internal virtual override {
+    //     for (uint256 i = 0; i < ids_.length; i++) {
+    //         if (ids_[i] == TOKEN_OPTION) {
+    //             _addTokenPurchase(to_, block.timestamp, amounts_[i]);
+    //         }
+    //     }
+    // }
 
     function _setCurRevenuePeriod(
         uint256 date_,
@@ -154,6 +165,7 @@ contract RevenueSplitter is ERC1155 {
 
         _setLastRevenuePeriod(curRevenuePeriodDate, curRevenuePeriodRevenue, curRevenuePeriodTotalSupply);
         _setCurRevenuePeriod(block.timestamp + REVENUE_PERIOD_DURATION, 0, 0);
+        curRevenuePeriodId++;
 
         _afterEndRevenuePeriod();
     }
@@ -196,6 +208,27 @@ contract RevenueSplitter is ERC1155 {
     }
 
     // // setGuardian()
+
+    /* ERC165 CONFIGs */
+    function onERC1155Received(
+        address,
+        address,
+        uint256,
+        uint256,
+        bytes calldata
+    ) external pure returns (bytes4) {
+        return bytes4(keccak256("onERC1155Received(address,address,uint256,uint256,bytes)"));
+    }
+
+    function onERC1155BatchReceived(
+        address,
+        address,
+        uint256,
+        uint256,
+        bytes calldata
+    ) external pure returns (bytes4) {
+        return bytes4(keccak256("onERC1155Received(address,address,uint256,uint256,bytes)"));
+    }
 
     // /* HOOKS */
     function _beforeTokenUnexercisedTransfer() internal virtual {}
