@@ -9,8 +9,8 @@ contract RevenuePool is RevenueSplitter {
 
     constructor(address owner, string memory uri_) RevenueSplitter(owner, uri_) {}
 
-    function purchase() external payable {
+    function deposit() external payable {
         // require(totalSupply() + msg.value <= MAX_TOKEN_SUPPLY, "");
-        _mint(msg.sender, 1, msg.value, "");
+        _mint(msg.sender, TOKEN_OPTION, msg.value, "");
     }
 }
