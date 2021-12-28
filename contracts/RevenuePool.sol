@@ -4,6 +4,9 @@ pragma solidity >=0.8.4;
 import "./interfaces/IRevenuePool.sol";
 import "./RevenueSplitter.sol";
 
+// TODO remove
+import "hardhat/console.sol";
+
 contract RevenuePool is RevenueSplitter {
     uint256 private constant MAX_TOKEN_SUPPLY = 100 ether;
 
@@ -11,6 +14,8 @@ contract RevenuePool is RevenueSplitter {
 
     function deposit() external payable {
         // require(totalSupply() + msg.value <= MAX_TOKEN_SUPPLY, "");
-        _mint(msg.sender, TOKEN_OPTION, msg.value, "");
+        uint256 tokenId = lastRevenuePeriodDate == 0 ? TOKEN : TOKEN_OPTION;
+
+        _mint(msg.sender, tokenId, msg.value, "");
     }
 }

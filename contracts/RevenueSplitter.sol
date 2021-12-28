@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.4;
 
-import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-
 import "./interfaces/IRevenueSplitter.sol";
+
+// TODO remove
+import "hardhat/console.sol";
 
 contract RevenueSplitter is ERC1155 {
     uint256 public constant REVENUE_PERIOD_DURATION = 90 days;
@@ -39,14 +40,14 @@ contract RevenueSplitter is ERC1155 {
     }
 
     mapping(address => TokenPurchase[]) private _tokenPurchases;
-    mapping(address => uint256) private _balanceOfUnexercised;
+    mapping(address => uint256) private _balanceOfUnexercised; // TODO remove
     uint256 private _totalSupplyUnexercised; // TODO expose?
 
     uint256 public curRevenuePeriodDate;
     uint256 private curRevenuePeriodRevenue;
     uint256 private curRevenuePeriodTotalSupply;
 
-    uint256 private lastRevenuePeriodDate;
+    uint256 public lastRevenuePeriodDate;
     uint256 private lastRevenuePeriodRevenue;
     uint256 private lastRevenuePeriodTotalSupply;
 
@@ -55,17 +56,22 @@ contract RevenueSplitter is ERC1155 {
         curRevenuePeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
     }
 
+    // GETTERS
+    // tokenPurchases
+
     /**
         TESTS
             1. Can redeem vested AND un-exercised shares once
             2. Returns the numbers of tokens minted
      */
+    // Exercise vested tokens
     function redeem() public returns (uint256 exercisedTokensCount) {
-        // exercisedTokensCount = _getVestableSharesCount(msg.sender, true);
-
-        // Exercise vested tokens
         TokenPurchase[] storage tokenPurchases = _tokenPurchases[msg.sender];
+
+        require(tokenPurchases.length > 0, "RevenueSplitter::redeem: ZERO_TOKEN_PURCHASES");
+
         for (uint256 i = 0; i < tokenPurchases.length - 1; i++) {
+            // console.log("EXERCISED TOKEN COUNT: ", exercisedTokensCount);
             if (tokenPurchases[i].date >= curRevenuePeriodDate && !tokenPurchases[i].exercised) {
                 tokenPurchases[i].exercised = true;
                 exercisedTokensCount += tokenPurchases[i].balance;
@@ -74,6 +80,7 @@ contract RevenueSplitter is ERC1155 {
 
         require(exercisedTokensCount > 0, "RevenueSplitter::redeem: ZERO_VESTABLE_SHARES");
 
+        console.log("TOKEN PURCHASE BALANCE: ", exercisedTokensCount);
         _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount);
         _mint(msg.sender, TOKEN, exercisedTokensCount, "");
 
@@ -81,6 +88,29 @@ contract RevenueSplitter is ERC1155 {
         // _mint(msg.sender, exercisedTokensCount);
 
         // TODO emit Redeem event
+    }
+
+    function _addTokenPurchase(
+        address addr_,
+        uint256 date_,
+        uint256 balance_
+    ) internal {
+        _tokenPurchases[addr_].push(TokenPurchase(date_, balance_, false));
+    }
+
+    function _beforeTokenTransfer(
+        address,
+        address,
+        address to_,
+        uint256[] memory ids_,
+        uint256[] memory amounts_,
+        bytes memory
+    ) internal virtual override {
+        for (uint256 i = 0; i < ids_.length; i++) {
+            if (ids_[i] == TOKEN_OPTION) {
+                _addTokenPurchase(to_, block.timestamp, amounts_[i]);
+            }
+        }
     }
 
     function _setCurRevenuePeriod(
