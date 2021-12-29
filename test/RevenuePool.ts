@@ -74,6 +74,19 @@ describe("Unit Tests Tests", () => {
         expect(balances[0]).to.equal(ZERO_ETH);
         expect(balances[1]).to.equal(TWO_ETH);
       });
+
+      it("Should fail if token purchase exceeds max token supply", async () => {
+        // TODO implement
+        // use signers to purchase ~95 tokens
+        // use singer to purchase 6 tokens, expect revert
+      });
+
+      it("Should fail if token option purchase exceeds max token supply", async () => {
+        // TODO implement
+        // use signers to purchase ~60 tokens
+        // use signers to purchase ~35 token options
+        // use singer to purchase 6 tokens options, expect revert
+      });
     });
 
     describe("redeem", () => {

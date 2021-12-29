@@ -14,6 +14,10 @@ contract RevenuePool is RevenueSplitter {
 
     function deposit() external payable {
         // require(totalSupply() + msg.value <= MAX_TOKEN_SUPPLY, "");
+        require(
+            totalSupply(TOKEN) + totalSupply(TOKEN_OPTION) + msg.value <= MAX_TOKEN_SUPPLY,
+            "RevenuePool::deposit: MAX_TOKEN_LIMIT"
+        );
         uint256 tokenId = lastRevenuePeriodDate == 0 ? TOKEN : TOKEN_OPTION;
 
         _mint(msg.sender, tokenId, msg.value, "");

@@ -43,7 +43,7 @@ contract RevenueSplitter is ERC1155 {
 
     mapping(address => TokenPurchase[]) private _tokenPurchases;
     mapping(address => uint256) private _balanceOfUnexercised; // TODO remove
-    uint256 private _totalSupplyUnexercised; // TODO expose?
+    mapping(uint256 => uint256) private _totalSupply;
 
     uint256 private curRevenuePeriodId;
     uint256 public curRevenuePeriodDate;
@@ -61,12 +61,12 @@ contract RevenueSplitter is ERC1155 {
 
     // GETTERS
     // tokenPurchases ?
+    // TODO test if can override this to make it 'internal'
+    function totalSupply(uint256 id_) public virtual returns (uint256) {
+        return _totalSupply[id_];
+    }
 
-    /**
-        TESTS
-            1. Can redeem vested AND un-exercised shares once
-            2. Returns the numbers of tokens minted
-     */
+    // TODO return `exercisedTokensCount`?
     // Exercise vested tokens
     function redeem() public returns (uint256 exercisedTokensCount) {
         TokenPurchase[] storage tokenPurchases = _tokenPurchases[msg.sender];
@@ -85,10 +85,10 @@ contract RevenueSplitter is ERC1155 {
         _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount);
         _mint(msg.sender, TOKEN, exercisedTokensCount, "");
 
-        // TODO emit Redeem event
+        emit Redeem(msg.sender, curRevenuePeriodId, exercisedTokensCount);
     }
 
-    function _addTokenPurchase(
+    function _createTokenPurchase(
         address addr_,
         uint256 vestingPeriod_,
         uint256 balance_
@@ -103,26 +103,13 @@ contract RevenueSplitter is ERC1155 {
         bytes memory data_
     ) internal virtual override {
         if (id_ == TOKEN_OPTION) {
-            _addTokenPurchase(to_, curRevenuePeriodId + 2, amount_);
+            _createTokenPurchase(to_, curRevenuePeriodId + 2, amount_);
         }
+
+        _totalSupply[id_] += amount_;
 
         super._mint(to_, id_, amount_, data_);
     }
-
-    // function _beforeTokenTransfer(
-    //     address,
-    //     address,
-    //     address to_,
-    //     uint256[] memory ids_,
-    //     uint256[] memory amounts_,
-    //     bytes memory
-    // ) internal virtual override {
-    //     for (uint256 i = 0; i < ids_.length; i++) {
-    //         if (ids_[i] == TOKEN_OPTION) {
-    //             _addTokenPurchase(to_, block.timestamp, amounts_[i]);
-    //         }
-    //     }
-    // }
 
     function _setCurRevenuePeriod(
         uint256 date_,
@@ -168,6 +155,8 @@ contract RevenueSplitter is ERC1155 {
         curRevenuePeriodId++;
 
         _afterEndRevenuePeriod();
+
+        emit EndPeriod(curRevenuePeriodId, curRevenuePeriodRevenue, curRevenuePeriodTotalSupply);
     }
 
     // function _deposit(address to_) internal virtual {
@@ -247,9 +236,11 @@ contract RevenueSplitter is ERC1155 {
     //     console.log("PLACEHOLDER");
     // }
 
-    function _onReceive() internal virtual {
-        console.log("PLACEHOLDER");
-    }
+    function _onReceive() internal virtual {}
 
     event PaymentReceived(address, uint256);
+
+    event Redeem(address, uint256, uint256);
+
+    event EndPeriod(uint256, uint256, uint256);
 }
