@@ -134,6 +134,23 @@ describe("Unit Tests Tests", () => {
         expect(balances[0]).to.equal(TWO_ETH);
         expect(balances[1]).to.equal(ZERO_ETH);
       });
+
+      it("Should work with 10 purchase records over time", async () => {
+        // repeat n times
+        // increase `n` in order to see how much `redeem()` costs as
+        // the number of token purchases for a given user scales
+        const n = 20;
+        await jumpLiquidityPeriods(pool, 1);
+        for (let i = 0; i < n; i++) {
+          await purchaseTokens(pool, [account1], TWO_ETH);
+          await jumpLiquidityPeriods(pool, 2);
+          await pool.connect(account1).redeem();
+        }
+
+        const balances = await pool.balanceOfBatch([account1.address, account1.address], [TOKEN_ID, TOKEN_OPTION_ID]);
+        expect(balances[0]).to.equal(TWO_ETH.mul(n));
+        expect(balances[1]).to.equal(ZERO_ETH);
+      });
       // Should throw an error if no unexercised vested tokens
     });
   });
