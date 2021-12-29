@@ -4,6 +4,7 @@ import "hardhat-gas-reporter";
 import "solidity-coverage";
 
 import "./tasks/accounts";
+import "./tasks/gasCost";
 import "./tasks/deploy";
 
 import { resolve } from "path";

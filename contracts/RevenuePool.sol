@@ -13,7 +13,6 @@ contract RevenuePool is RevenueSplitter {
     constructor(address owner, string memory uri_) RevenueSplitter(owner, uri_) {}
 
     function deposit() external payable {
-        // require(totalSupply() + msg.value <= MAX_TOKEN_SUPPLY, "");
         require(
             totalSupply(TOKEN) + totalSupply(TOKEN_OPTION) + msg.value <= MAX_TOKEN_SUPPLY,
             "RevenuePool::deposit: MAX_TOKEN_LIMIT"
