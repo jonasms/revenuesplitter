@@ -25,7 +25,7 @@ contract RevenueSplitter is ERC1155 {
 
     uint256 curLiquidityPer;
 
-    // TODO using
+    // TODO rename
     struct RevenuePeriod {
         // TODO data packing?
         uint256 date;
@@ -37,22 +37,23 @@ contract RevenueSplitter is ERC1155 {
     struct TokenPurchase {
         // TODO data packing?
         uint256 vestingPeriod;
-        uint256 balance;
+        uint256 balance; // TODO change to 'amount'
         bool exercised;
     }
 
     mapping(address => TokenPurchase[]) private _tokenPurchases;
     mapping(address => uint256) private _balanceOfUnexercised; // TODO remove
-    mapping(uint256 => uint256) private _totalSupply;
+    mapping(uint256 => uint256) private _totalSupply; // TODO remove
+    // TODO create _totalSupplyRestricted
 
     uint256 private curRevenuePeriodId;
     uint256 public curRevenuePeriodDate;
     uint256 private curRevenuePeriodRevenue;
-    uint256 private curRevenuePeriodTotalSupply;
+    uint256 private curRevenuePeriodTotalSupply; // TODO being used?
 
     uint256 public lastRevenuePeriodDate;
     uint256 private lastRevenuePeriodRevenue;
-    uint256 private lastRevenuePeriodTotalSupply;
+    uint256 private lastRevenuePeriodTotalSupply; // TODO being used?
 
     constructor(address owner_, string memory uri_) ERC1155(uri_) {
         owner = owner_;
@@ -82,12 +83,17 @@ contract RevenueSplitter is ERC1155 {
 
         require(exercisedTokensCount > 0, "RevenueSplitter::redeem: ZERO_EXERCISABLE_SHARES");
 
-        _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount);
+        // TODO decrease _totalSupplyRestricted by exercisedTokensCount
+
+        // TODO remove _burn
+        // TODO modify _mint, ERC20
+        _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount); // removing this makes for a ~16.6% reduction in gas fees
         _mint(msg.sender, TOKEN, exercisedTokensCount, "");
 
         emit Redeem(msg.sender, curRevenuePeriodId, exercisedTokensCount);
     }
 
+    // TODO rename
     function _createTokenPurchase(
         address addr_,
         uint256 vestingPeriod_,
@@ -102,6 +108,7 @@ contract RevenueSplitter is ERC1155 {
         uint256 amount_,
         bytes memory data_
     ) internal virtual override {
+        // TODO do this elsewhere
         if (id_ == TOKEN_OPTION) {
             _createTokenPurchase(to_, curRevenuePeriodId + 2, amount_);
         }
@@ -144,11 +151,6 @@ contract RevenueSplitter is ERC1155 {
         );
 
         _beforeEndRevenuePeriod();
-
-        // TODO what is this supposed to be doing?
-        if (lastRevenuePeriodDate > 0) {
-            _mint(address(this), TOKEN, curRevenuePeriodTotalSupply, "");
-        }
 
         _setLastRevenuePeriod(curRevenuePeriodDate, curRevenuePeriodRevenue, curRevenuePeriodTotalSupply);
         _setCurRevenuePeriod(block.timestamp + REVENUE_PERIOD_DURATION, 0, 0);
@@ -199,6 +201,7 @@ contract RevenueSplitter is ERC1155 {
     // // setGuardian()
 
     /* ERC165 CONFIGs */
+    // TODO remove
     function onERC1155Received(
         address,
         address,
