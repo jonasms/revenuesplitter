@@ -10,18 +10,24 @@ import "hardhat/console.sol";
 contract RevenuePool is RevenueSplitter {
     uint256 private constant MAX_TOKEN_SUPPLY = 100 ether;
 
-    constructor(address owner, string memory uri_) RevenueSplitter(owner, uri_) {}
+    constructor(
+        address owner_,
+        string memory name_,
+        string memory symbol_
+    ) RevenueSplitter(owner_, name_, symbol_) {}
 
     function deposit() external payable {
         require(
-            totalSupply(TOKEN) + totalSupply(TOKEN_OPTION) + msg.value <= MAX_TOKEN_SUPPLY,
+            totalSupply() + totalSupplyUnexercised() + msg.value <= MAX_TOKEN_SUPPLY,
             "RevenuePool::deposit: MAX_TOKEN_LIMIT"
         );
 
-        // mint or createRestrictedTokenGrant (createRTG)
-
-        uint256 tokenId = lastRevenuePeriodDate == 0 ? TOKEN : TOKEN_OPTION;
-
-        _mint(msg.sender, tokenId, msg.value, "");
+        // mint tokens if in first revenue period
+        // otherwise, grant restricted tokens
+        if (lastRevenuePeriodDate == 0) {
+            _mint(msg.sender, msg.value);
+        } else {
+            _createTokenGrant(msg.sender, curRevenuePeriodId + 2, msg.value);
+        }
     }
 }

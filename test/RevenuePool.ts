@@ -56,9 +56,9 @@ describe("Unit Tests Tests", () => {
         await pool.connect(account1).deposit({ value: TWO_ETH });
 
         // expect equivalent token balance and zero token share balance
-        const balances = await pool.balanceOfBatch([account1.address, account1.address], [TOKEN_ID, TOKEN_OPTION_ID]);
-        expect(balances[0]).to.equal(TWO_ETH);
-        expect(balances[1]).to.equal(ZERO_ETH);
+        // console.log("BALANCE: ", await pool.balanceOf(account1.address));
+        expect(await pool.balanceOf(account1.address)).to.equal(TWO_ETH);
+        expect(await pool.balanceOfUnexercised(account1.address)).to.equal(ZERO_ETH);
       });
 
       it("Should purchase token shares after the first liquidity period", async () => {
@@ -70,9 +70,8 @@ describe("Unit Tests Tests", () => {
         // expect(await pool.connect(account1).balanceOf(account1.address, TOKEN_ID)).to.equal(ZERO_ETH);
         // expect(await pool.connect(account1).balanceOf(account1.address, TOKEN_OPTION_ID)).to.equal(TWO_ETH);
 
-        const balances = await pool.balanceOfBatch([account1.address, account1.address], [TOKEN_ID, TOKEN_OPTION_ID]);
-        expect(balances[0]).to.equal(ZERO_ETH);
-        expect(balances[1]).to.equal(TWO_ETH);
+        expect(await pool.balanceOf(account1.address)).to.equal(ZERO_ETH);
+        expect(await pool.balanceOfUnexercised(account1.address)).to.equal(TWO_ETH);
       });
 
       it("Should fail if token purchase exceeds max token supply", async () => {
@@ -123,16 +122,13 @@ describe("Unit Tests Tests", () => {
         // where purchased token shares can be exercised
         await jumpLiquidityPeriods(pool, 2);
 
-        let balances: BigNumber[];
-        balances = await pool.balanceOfBatch([account1.address, account1.address], [TOKEN_ID, TOKEN_OPTION_ID]);
-        expect(balances[0]).to.equal(ZERO_ETH);
-        expect(balances[1]).to.equal(TWO_ETH);
+        expect(await pool.balanceOf(account1.address)).to.equal(ZERO_ETH);
+        expect(await pool.balanceOfUnexercised(account1.address)).to.equal(TWO_ETH);
 
         await pool.connect(account1).redeem();
 
-        balances = await pool.balanceOfBatch([account1.address, account1.address], [TOKEN_ID, TOKEN_OPTION_ID]);
-        expect(balances[0]).to.equal(TWO_ETH);
-        expect(balances[1]).to.equal(ZERO_ETH);
+        expect(await pool.balanceOf(account1.address)).to.equal(TWO_ETH);
+        expect(await pool.balanceOfUnexercised(account1.address)).to.equal(ZERO_ETH);
       });
 
       it("Should work with 10 purchase records over time", async () => {
@@ -147,9 +143,8 @@ describe("Unit Tests Tests", () => {
           await pool.connect(account1).redeem();
         }
 
-        const balances = await pool.balanceOfBatch([account1.address, account1.address], [TOKEN_ID, TOKEN_OPTION_ID]);
-        expect(balances[0]).to.equal(TWO_ETH.mul(n));
-        expect(balances[1]).to.equal(ZERO_ETH);
+        expect(await pool.balanceOf(account1.address)).to.equal(TWO_ETH.mul(n));
+        expect(await pool.balanceOfUnexercised(account1.address)).to.equal(ZERO_ETH);
       });
       // Should throw an error if no unexercised vested tokens
     });

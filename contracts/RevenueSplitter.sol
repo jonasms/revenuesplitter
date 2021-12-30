@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.4;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./interfaces/IRevenueSplitter.sol";
 
 // TODO remove
 import "hardhat/console.sol";
 
-contract RevenueSplitter is ERC1155 {
+contract RevenueSplitter is ERC20 {
     uint256 public constant REVENUE_PERIOD_DURATION = 90 days;
-    uint256 public constant TOKEN = 1;
-    uint256 public constant TOKEN_OPTION = 2;
 
     /**
         Used to give users a period of time to vest unvested tokens
@@ -18,14 +16,8 @@ contract RevenueSplitter is ERC1155 {
      */
     // uint256 private constant BLACKOUT_PERIOD = 7 days;
 
-    address owner;
+    address public owner;
 
-    // track funds collected in curPeriodFunds
-    // set curPeriodFunds to lastPeriodFunds
-
-    uint256 curLiquidityPer;
-
-    // TODO rename
     struct RevenuePeriod {
         // TODO data packing?
         uint256 date;
@@ -34,19 +26,17 @@ contract RevenueSplitter is ERC1155 {
         mapping(address => uint256) balanceOfUnvested; // TODO being used?
     }
 
-    struct TokenPurchase {
+    struct RestrictedTokenGrant {
         // TODO data packing?
         uint256 vestingPeriod;
-        uint256 balance; // TODO change to 'amount'
+        uint256 amount;
         bool exercised;
     }
 
-    mapping(address => TokenPurchase[]) private _tokenPurchases;
-    mapping(address => uint256) private _balanceOfUnexercised; // TODO remove
-    mapping(uint256 => uint256) private _totalSupply; // TODO remove
-    // TODO create _totalSupplyRestricted
+    mapping(address => RestrictedTokenGrant[]) private _tokenGrants;
+    uint256 private _totalSupplyUnexercised;
 
-    uint256 private curRevenuePeriodId;
+    uint256 public curRevenuePeriodId;
     uint256 public curRevenuePeriodDate;
     uint256 private curRevenuePeriodRevenue;
     uint256 private curRevenuePeriodTotalSupply; // TODO being used?
@@ -55,29 +45,48 @@ contract RevenueSplitter is ERC1155 {
     uint256 private lastRevenuePeriodRevenue;
     uint256 private lastRevenuePeriodTotalSupply; // TODO being used?
 
-    constructor(address owner_, string memory uri_) ERC1155(uri_) {
+    constructor(
+        address owner_,
+        string memory name_,
+        string memory symbol_
+    ) ERC20(name_, symbol_) {
         owner = owner_;
+        // TODO set first revenue period end date in separate fxn?
         curRevenuePeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
     }
 
     // GETTERS
     // tokenPurchases ?
-    // TODO test if can override this to make it 'internal'
-    function totalSupply(uint256 id_) public virtual returns (uint256) {
-        return _totalSupply[id_];
+    // TODO test if can override this to make it 'internal'. Otherwise, I'm unsure of the purpose of this.
+    function totalSupplyUnexercised() public view virtual returns (uint256) {
+        return _totalSupplyUnexercised;
+    }
+
+    function balanceOfUnexercised(address account_) public view virtual returns (uint256) {
+        console.log("BALANCE OF UNEXERCISED");
+        uint256 amountUnexercised = 0;
+        RestrictedTokenGrant[] storage tokenGrants = _tokenGrants[account_];
+        console.log("NUM TOKEN GRANTS: ", tokenGrants.length);
+        for (uint256 i = 0; i < tokenGrants.length; i++) {
+            if (!tokenGrants[i].exercised) {
+                amountUnexercised += tokenGrants[i].amount;
+            }
+        }
+        console.log("AMOUNT UNEXERCISED: ", amountUnexercised);
+        return amountUnexercised;
     }
 
     // TODO return `exercisedTokensCount`?
     // Exercise vested tokens
     function redeem() public returns (uint256 exercisedTokensCount) {
-        TokenPurchase[] storage tokenPurchases = _tokenPurchases[msg.sender];
+        RestrictedTokenGrant[] storage tokenGrants = _tokenGrants[msg.sender];
 
-        require(tokenPurchases.length > 0, "RevenueSplitter::redeem: ZERO_TOKEN_PURCHASES");
+        require(tokenGrants.length > 0, "RevenueSplitter::redeem: ZERO_TOKEN_PURCHASES");
 
-        for (uint256 i = 0; i < tokenPurchases.length; i++) {
-            if (tokenPurchases[i].vestingPeriod <= curRevenuePeriodId && !tokenPurchases[i].exercised) {
-                tokenPurchases[i].exercised = true;
-                exercisedTokensCount += tokenPurchases[i].balance;
+        for (uint256 i = 0; i < tokenGrants.length; i++) {
+            if (tokenGrants[i].vestingPeriod <= curRevenuePeriodId && !tokenGrants[i].exercised) {
+                tokenGrants[i].exercised = true;
+                exercisedTokensCount += tokenGrants[i].amount;
             }
         }
 
@@ -87,36 +96,37 @@ contract RevenueSplitter is ERC1155 {
 
         // TODO remove _burn
         // TODO modify _mint, ERC20
-        _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount); // removing this makes for a ~16.6% reduction in gas fees
-        _mint(msg.sender, TOKEN, exercisedTokensCount, "");
+        // _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount); // removing this makes for a ~16.6% reduction in gas fees
+        _mint(msg.sender, exercisedTokensCount);
 
         emit Redeem(msg.sender, curRevenuePeriodId, exercisedTokensCount);
     }
 
     // TODO rename
-    function _createTokenPurchase(
+    function _createTokenGrant(
         address addr_,
         uint256 vestingPeriod_,
-        uint256 balance_
+        uint256 amount_
     ) internal {
-        _tokenPurchases[addr_].push(TokenPurchase(vestingPeriod_, balance_, false));
+        _tokenGrants[addr_].push(RestrictedTokenGrant(vestingPeriod_, amount_, false));
     }
 
-    function _mint(
-        address to_,
-        uint256 id_,
-        uint256 amount_,
-        bytes memory data_
-    ) internal virtual override {
-        // TODO do this elsewhere
-        if (id_ == TOKEN_OPTION) {
-            _createTokenPurchase(to_, curRevenuePeriodId + 2, amount_);
-        }
+    // TODO remove?
+    // function _mint(
+    //     address to_,
+    //     uint256 id_,
+    //     uint256 amount_,
+    //     bytes memory data_
+    // ) internal virtual override {
+    //     // TODO do this elsewhere
+    //     if (id_ == TOKEN_OPTION) {
+    //         _createTokenGrant(to_, curRevenuePeriodId + 2, amount_);
+    //     }
 
-        _totalSupply[id_] += amount_;
+    //     _totalSupply[id_] += amount_;
 
-        super._mint(to_, id_, amount_, data_);
-    }
+    //     super._mint(to_, id_, amount_, data_);
+    // }
 
     function _setCurRevenuePeriod(
         uint256 date_,
@@ -144,7 +154,6 @@ contract RevenueSplitter is ERC1155 {
             2. Fxn sets `lastRevenuePeriod` and creates a new `curRevenuePeriod`
      */
     function endRevenuePeriod() public {
-        // RevenuePeriod _curRevenuePeriod = curRevenuePeriod;
         require(
             block.timestamp >= curRevenuePeriodDate,
             "RevenueSplitter::endRevenuePeriod: REVENUE_PERIOD_IN_PROGRESS"
@@ -198,31 +207,9 @@ contract RevenueSplitter is ERC1155 {
         emit PaymentReceived(msg.sender, msg.value);
     }
 
-    // // setGuardian()
+    // setGuardian()
 
-    /* ERC165 CONFIGs */
-    // TODO remove
-    function onERC1155Received(
-        address,
-        address,
-        uint256,
-        uint256,
-        bytes calldata
-    ) external pure returns (bytes4) {
-        return bytes4(keccak256("onERC1155Received(address,address,uint256,uint256,bytes)"));
-    }
-
-    function onERC1155BatchReceived(
-        address,
-        address,
-        uint256,
-        uint256,
-        bytes calldata
-    ) external pure returns (bytes4) {
-        return bytes4(keccak256("onERC1155Received(address,address,uint256,uint256,bytes)"));
-    }
-
-    // /* HOOKS */
+    /* HOOKS */
     function _beforeTokenUnexercisedTransfer() internal virtual {}
 
     function _afterTokenUnexercisedTransfer() internal virtual {}
