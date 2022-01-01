@@ -26,6 +26,7 @@ contract RevenuePool is RevenueSplitter {
     }
 
     /* PRIMARY FEATURES */
+    // TODO rename to purchase
     function deposit() external payable {
         require(
             totalSupply() + totalSupplyUnexercised() + msg.value <= maxTokenSupply,
@@ -47,6 +48,20 @@ contract RevenuePool is RevenueSplitter {
         if (transactionFee > 0) {
             _mint(owner, transactionFee);
         }
+    }
+
+    function withdraw() external {
+        // get tokens not used in the current period
+        require(lastRevenuePeriodRevenue > 0, "");
+
+        uint256 withdrawlPower = _getCurWithdrawlPower(msg.sender);
+        require(withdrawlPower > 0, "");
+
+        uint256 share = withdrawlPower / totalSupply();
+        uint256 ethShare = share / lastRevenuePeriodRevenue;
+
+        (bool success, ) = msg.sender.call{ value: ethShare }("");
+        require(success, "");
     }
 
     /* OVERRIDES AND HOOKS */

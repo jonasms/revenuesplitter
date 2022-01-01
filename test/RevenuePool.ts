@@ -154,5 +154,13 @@ describe("Unit Tests Tests", () => {
       });
       // Should throw an error if no unexercised vested tokens
     });
+
+    // TODO test tsx fees
+
+    // TODO test exchange rate
+
+    // TODO test withdraw()
+    //  - can withdraw correct amount
+    //  - cannot withdraw, transfer tokens, withraw again using same tokens
   });
 });

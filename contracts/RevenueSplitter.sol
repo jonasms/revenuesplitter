@@ -37,13 +37,17 @@ contract RevenueSplitter is ERC20 {
     uint256 private _totalSupplyUnexercised;
 
     uint256 public curRevenuePeriodId;
+
+    // TODO convert to arrays?
     uint256 public curRevenuePeriodDate;
     uint256 private curRevenuePeriodRevenue;
     uint256 private curRevenuePeriodTotalSupply; // TODO being used?
 
     uint256 public lastRevenuePeriodDate;
-    uint256 private lastRevenuePeriodRevenue;
+    uint256 internal lastRevenuePeriodRevenue;
     uint256 private lastRevenuePeriodTotalSupply; // TODO being used?
+
+    mapping(uint256 => mapping(address => uint256)) private withdrawlReceipts;
 
     constructor(
         address owner_,
@@ -104,6 +108,25 @@ contract RevenueSplitter is ERC20 {
     ) internal {
         _totalSupplyUnexercised += amount_;
         _tokenGrants[addr_].push(RestrictedTokenGrant(vestingPeriod_, amount_, false));
+    }
+
+    function _getCurWithdrawlPower(address account_) internal view returns (uint256 amount) {
+        amount = balanceOf(account_) - withdrawlReceipts[curRevenuePeriodId - 1][account_];
+    }
+
+    function getCurWithdrawlPower() external view returns (uint256) {
+        return _getCurWithdrawlPower(msg.sender);
+    }
+
+    function _transfer(
+        address to_,
+        address from_,
+        uint256 amount_
+    ) internal virtual override {
+        // prevent tokens being used for a withdrawl more than once per revenue period
+        withdrawlReceipts[curRevenuePeriodId - 1][to_] += withdrawlReceipts[curRevenuePeriodId - 1][from_];
+
+        super._transfer(from_, to_, amount_);
     }
 
     // TODO remove?
