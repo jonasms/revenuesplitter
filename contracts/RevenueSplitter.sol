@@ -62,19 +62,16 @@ contract RevenueSplitter is ERC20 {
         return _totalSupplyUnexercised;
     }
 
-    function balanceOfUnexercised(address account_) public view virtual returns (uint256) {
-        console.log("BALANCE OF UNEXERCISED");
-        uint256 amountUnexercised = 0;
+    function balanceOfUnexercised(address account_) public view virtual returns (uint256 balanceUnexercised) {
         RestrictedTokenGrant[] storage tokenGrants = _tokenGrants[account_];
-        console.log("NUM TOKEN GRANTS: ", tokenGrants.length);
         for (uint256 i = 0; i < tokenGrants.length; i++) {
             if (!tokenGrants[i].exercised) {
-                amountUnexercised += tokenGrants[i].amount;
+                balanceUnexercised += tokenGrants[i].amount;
             }
         }
-        console.log("AMOUNT UNEXERCISED: ", amountUnexercised);
-        return amountUnexercised;
     }
+
+    // TODO redeemBatched()
 
     // TODO return `exercisedTokensCount`?
     // Exercise vested tokens
@@ -93,10 +90,7 @@ contract RevenueSplitter is ERC20 {
         require(exercisedTokensCount > 0, "RevenueSplitter::redeem: ZERO_EXERCISABLE_SHARES");
 
         // TODO decrease _totalSupplyRestricted by exercisedTokensCount
-
-        // TODO remove _burn
-        // TODO modify _mint, ERC20
-        // _burn(msg.sender, TOKEN_OPTION, exercisedTokensCount); // removing this makes for a ~16.6% reduction in gas fees
+        _totalSupplyUnexercised -= exercisedTokensCount;
         _mint(msg.sender, exercisedTokensCount);
 
         emit Redeem(msg.sender, curRevenuePeriodId, exercisedTokensCount);
@@ -108,6 +102,7 @@ contract RevenueSplitter is ERC20 {
         uint256 vestingPeriod_,
         uint256 amount_
     ) internal {
+        _totalSupplyUnexercised += amount_;
         _tokenGrants[addr_].push(RestrictedTokenGrant(vestingPeriod_, amount_, false));
     }
 
