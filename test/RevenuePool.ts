@@ -34,11 +34,11 @@ const jumpLiquidityPeriods = async (pool: RevenuePool, n: number) => {
 describe("Unit Tests Tests", () => {
   let pool: RevenuePool;
   let signers: SignerWithAddress[];
-  let [admin, treasury, account1, account2]: SignerWithAddress[] = [];
+  let [admin, account1, account2]: SignerWithAddress[] = [];
 
   before(async function () {
     signers = await ethers.getSigners();
-    [admin, treasury, account1, account2] = signers;
+    [admin, account1, account2] = signers;
     signers = signers.slice(1);
   });
 
@@ -48,7 +48,6 @@ describe("Unit Tests Tests", () => {
       pool = <RevenuePool>(
         await waffle.deployContract(admin, revenuePoolArtifact, [
           admin.address,
-          treasury.address,
           parseEther("100"),
           1,
           "Web3 Revenue Pool",
