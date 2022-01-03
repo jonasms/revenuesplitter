@@ -10,7 +10,6 @@ import "hardhat/console.sol";
 contract RevenuePool is RevenueSplitter {
     uint256 private constant MAX_TOKEN_SUPPLY = 100 ether; // TODO convert to state
     uint256 private constant TSX_FEE = 10;
-    uint256 public maxTokenSupply;
     uint256 public exchangeRate; // TODO create setter
     bool public feesEnabled; // TODO create setter
 
@@ -20,48 +19,27 @@ contract RevenuePool is RevenueSplitter {
         uint256 exchangeRate_,
         string memory name_,
         string memory symbol_
-    ) RevenueSplitter(owner_, name_, symbol_) {
-        maxTokenSupply = maxTokenSupply_;
+    ) RevenueSplitter(owner_, maxTokenSupply_, name_, symbol_) {
         exchangeRate = exchangeRate_;
     }
 
     /* PRIMARY FEATURES */
-    // TODO rename to purchase
+    // TODO rename to `depositLiquidity()`
     function deposit() external payable {
-        require(
-            totalSupply() + totalSupplyUnexercised() + msg.value <= maxTokenSupply,
-            "RevenuePool::deposit: MAX_TOKEN_LIMIT"
-        );
-
         (uint256 amountToMint, uint256 transactionFee) = getTokensLessFees(msg.value);
 
         amountToMint = amountToMint / exchangeRate;
 
-        // mint tokens if in first revenue period
-        // otherwise, grant restricted tokens
-        if (lastRevenuePeriodDate == 0) {
-            _mint(msg.sender, amountToMint);
-        } else {
-            _createTokenGrant(msg.sender, curRevenuePeriodId + 2, amountToMint);
-        }
+        _deposit(msg.sender, amountToMint);
 
         if (transactionFee > 0) {
             _mint(owner, transactionFee);
         }
     }
 
+    // TODO rename to `withdrawRevenue()`
     function withdraw() external {
-        // get tokens not used in the current period
-        require(lastRevenuePeriodRevenue > 0, "");
-
-        uint256 withdrawlPower = _getCurWithdrawlPower(msg.sender);
-        require(withdrawlPower > 0, "");
-
-        uint256 share = withdrawlPower / totalSupply();
-        uint256 ethShare = share / lastRevenuePeriodRevenue;
-
-        (bool success, ) = msg.sender.call{ value: ethShare }("");
-        require(success, "");
+        _withdrawReveneuShare(msg.sender);
     }
 
     /* OVERRIDES AND HOOKS */
@@ -92,11 +70,6 @@ contract RevenuePool is RevenueSplitter {
     }
 
     /* SETTERS */
-    function setMaxTokenSupply(uint256 maxTokenSupply_) external {
-        require(msg.sender == owner, "RevenuePool::setMaxTokenSupply: ONLY_OWNER");
-        maxTokenSupply = maxTokenSupply_;
-    }
-
     function setExchangeRate(uint256 exchangeRate_) external {
         require(msg.sender == owner, "RevenuePool::setExchangeRate: ONLY_OWNER");
         exchangeRate = exchangeRate_;

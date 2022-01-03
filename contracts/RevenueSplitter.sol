@@ -17,6 +17,7 @@ contract RevenueSplitter is ERC20 {
     // uint256 private constant BLACKOUT_PERIOD = 7 days;
 
     address public owner;
+    uint256 public maxTokenSupply;
 
     struct RevenuePeriod {
         // TODO data packing?
@@ -51,10 +52,12 @@ contract RevenueSplitter is ERC20 {
 
     constructor(
         address owner_,
+        uint256 maxTokenSupply_,
         string memory name_,
         string memory symbol_
     ) ERC20(name_, symbol_) {
         owner = owner_;
+        maxTokenSupply = maxTokenSupply_;
         // TODO set first revenue period end date in separate fxn?
         curRevenuePeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
     }
@@ -75,9 +78,55 @@ contract RevenueSplitter is ERC20 {
         }
     }
 
-    // TODO redeemBatched()
+    // _deposit(address account_, uint amount_) internal virtual
+    //  - require deposit amount less than max supply
+    //  - calculates amount to mint
+    //  - handles transaction fee
+    //
+    //  - mints or a grant token
+    //  - emits event
+    function _deposit(address account_, uint256 amount_) internal virtual {
+        require(
+            totalSupply() + _totalSupplyUnexercised + amount_ <= maxTokenSupply,
+            "RevenueSplitter::_deposit: MAX_TOKEN_LIMIT"
+        );
+
+        // mint tokens if in first revenue period
+        // otherwise, grant restricted tokens
+        // TODO make conditional more dynamic
+        if (lastRevenuePeriodDate == 0) {
+            _mint(account_, amount_);
+        } else {
+            _createTokenGrant(account_, curRevenuePeriodId + 2, amount_);
+        }
+    }
+
+    // TODO _withdrawRevenueShare()
+    //  - handles transaction fee, if any
+
+    //  - calculates eth owed to given address
+    //  - marks shares withdrawn for given address and period
+    //  - transfers eth to given address
+    //  - emits event
+    function _withdrawReveneuShare(address account_) internal virtual {
+        require(lastRevenuePeriodRevenue > 0, "");
+
+        uint256 withdrawlPower = _getCurWithdrawlPower(account_);
+
+        require(withdrawlPower > 0, "");
+
+        uint256 share = withdrawlPower / totalSupply();
+        uint256 ethShare = share / lastRevenuePeriodRevenue;
+
+        withdrawlReceipts[curRevenuePeriodId - 1][account_] += withdrawlPower;
+        (bool success, ) = account_.call{ value: ethShare }("");
+        require(success, "");
+        // TODO handle bytes error message
+        // TODO emit code
+    }
 
     // TODO return `exercisedTokensCount`?
+    // TODO make internal, takes an `address to_` param
     // Exercise vested tokens
     function redeem() public returns (uint256 exercisedTokensCount) {
         RestrictedTokenGrant[] storage tokenGrants = _tokenGrants[msg.sender];
@@ -100,6 +149,8 @@ contract RevenueSplitter is ERC20 {
         emit Redeem(msg.sender, curRevenuePeriodId, exercisedTokensCount);
     }
 
+    // TODO redeemBatched()
+
     // TODO rename
     function _createTokenGrant(
         address addr_,
@@ -108,6 +159,8 @@ contract RevenueSplitter is ERC20 {
     ) internal {
         _totalSupplyUnexercised += amount_;
         _tokenGrants[addr_].push(RestrictedTokenGrant(vestingPeriod_, amount_, false));
+
+        // TODO emit event
     }
 
     function _getCurWithdrawlPower(address account_) internal view returns (uint256 amount) {
@@ -124,7 +177,17 @@ contract RevenueSplitter is ERC20 {
         uint256 amount_
     ) internal virtual override {
         // prevent tokens being used for a withdrawl more than once per revenue period
-        withdrawlReceipts[curRevenuePeriodId - 1][to_] += withdrawlReceipts[curRevenuePeriodId - 1][from_];
+        uint256 fromWithdrawlPower = _getCurWithdrawlPower(from_);
+
+        uint256 withdrawlReceiptTransfer = amount_ >= fromWithdrawlPower ? amount_ - fromWithdrawlPower : amount_;
+
+        // TODO test scenario
+        //  user withdrawls
+        //  user redeems tokens
+        //  user transfers more than amt tokens just reedemed (transferring tokens withdrawn in the current period)
+        //  to_ user should only be able to withdraw up to the amt of tokens just reedemed
+
+        withdrawlReceipts[curRevenuePeriodId - 1][to_] += withdrawlReceiptTransfer;
 
         super._transfer(from_, to_, amount_);
     }
@@ -226,6 +289,12 @@ contract RevenueSplitter is ERC20 {
     }
 
     // setGuardian()
+
+    /* SETTERS */
+    function setMaxTokenSupply(uint256 maxTokenSupply_) external {
+        require(msg.sender == owner, "RevenuePool::setMaxTokenSupply: ONLY_OWNER");
+        maxTokenSupply = maxTokenSupply_;
+    }
 
     /* HOOKS */
     function _beforeTokenUnexercisedTransfer() internal virtual {}
