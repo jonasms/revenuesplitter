@@ -20,7 +20,7 @@ const TOKEN_OPTION_ID = BigNumber.from(2);
 
 const purchaseTokens = async (pool: RevenuePool, accounts: SignerWithAddress[], amount: BigNumber) => {
   for (let i = 0; i < accounts.length; i++) {
-    await pool.connect(accounts[i]).deposit({ value: amount });
+    await pool.connect(accounts[i]).depositLiquidity({ value: amount });
   }
 };
 
@@ -56,10 +56,9 @@ describe("Unit Tests Tests", () => {
       );
     });
 
-    describe("deposit", () => {
+    describe("depositLiquidity", () => {
       it("Should purchase tokens during the first liquidity period", async () => {
-        // deposit ETH
-        await pool.connect(account1).deposit({ value: TWO_ETH });
+        await pool.connect(account1).depositLiquidity({ value: TWO_ETH });
 
         // expect equivalent token balance and zero token share balance
         // console.log("BALANCE: ", await pool.balanceOf(account1.address));
@@ -71,10 +70,7 @@ describe("Unit Tests Tests", () => {
         // jump to 2nd liquidity period
         await jumpLiquidityPeriods(pool, 1);
 
-        await pool.connect(account1).deposit({ value: TWO_ETH });
-
-        // expect(await pool.connect(account1).balanceOf(account1.address, TOKEN_ID)).to.equal(ZERO_ETH);
-        // expect(await pool.connect(account1).balanceOf(account1.address, TOKEN_OPTION_ID)).to.equal(TWO_ETH);
+        await pool.connect(account1).depositLiquidity({ value: TWO_ETH });
 
         expect(await pool.balanceOf(account1.address)).to.equal(ZERO_ETH);
         expect(await pool.balanceOfUnexercised(account1.address)).to.equal(TWO_ETH);
@@ -92,6 +88,36 @@ describe("Unit Tests Tests", () => {
         // use signers to purchase ~35 token options
         // use singer to purchase 6 tokens options, expect revert
       });
+    });
+
+    describe.only("withdrawRevenue", () => {
+      beforeEach(async () => {
+        // await pool.connect(account1).depositLiquidity({ value: TWO_ETH });
+
+        await purchaseTokens(pool, signers.slice(0, 10), TWO_ETH);
+      });
+      //  - can withdraw correct amount
+      it("Should withdraw the correct amount", async () => {
+        await admin.sendTransaction({
+          to: pool.address,
+          value: parseEther("9"),
+        });
+
+        await jumpLiquidityPeriods(pool, 1);
+
+        const balanceBeforeWithdrawl: BigNumber = await account1.getBalance();
+
+        await pool.connect(account1).withdrawRevenue();
+
+        const balanceAfterWithdrawl: BigNumber = await account1.getBalance();
+
+        const amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
+
+        // Should be 0.9 ETH less gas fees for executing withdrawRevenue()
+        expect(amountWithdrawn).gte(parseEther("0.899"));
+      });
+      //  - cannot withdraw, transfer tokens, withraw again using same tokens
+      // it("Should prevent tokens being used to withdraw more than once in a given period", () => {});
     });
 
     describe("redeem", () => {
@@ -158,9 +184,5 @@ describe("Unit Tests Tests", () => {
     // TODO test tsx fees
 
     // TODO test exchange rate
-
-    // TODO test withdraw()
-    //  - can withdraw correct amount
-    //  - cannot withdraw, transfer tokens, withraw again using same tokens
   });
 });

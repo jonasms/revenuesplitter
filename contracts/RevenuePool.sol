@@ -24,8 +24,7 @@ contract RevenuePool is RevenueSplitter {
     }
 
     /* PRIMARY FEATURES */
-    // TODO rename to `depositLiquidity()`
-    function deposit() external payable {
+    function depositLiquidity() external payable {
         (uint256 amountToMint, uint256 transactionFee) = getTokensLessFees(msg.value);
 
         amountToMint = amountToMint / exchangeRate;
@@ -37,9 +36,8 @@ contract RevenuePool is RevenueSplitter {
         }
     }
 
-    // TODO rename to `withdrawRevenue()`
-    function withdraw() external {
-        _withdrawReveneuShare(msg.sender);
+    function withdrawRevenue() external {
+        _withdrawRevenueShare(msg.sender);
     }
 
     /* OVERRIDES AND HOOKS */

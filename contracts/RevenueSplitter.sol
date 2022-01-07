@@ -93,7 +93,7 @@ contract RevenueSplitter is ERC20 {
 
         // mint tokens if in first revenue period
         // otherwise, grant restricted tokens
-        // TODO make conditional more dynamic
+        // TODO make conditional more dynamic?
         if (lastRevenuePeriodDate == 0) {
             _mint(account_, amount_);
         } else {
@@ -101,28 +101,22 @@ contract RevenueSplitter is ERC20 {
         }
     }
 
-    // TODO _withdrawRevenueShare()
-    //  - handles transaction fee, if any
-
-    //  - calculates eth owed to given address
-    //  - marks shares withdrawn for given address and period
-    //  - transfers eth to given address
-    //  - emits event
-    function _withdrawReveneuShare(address account_) internal virtual {
-        require(lastRevenuePeriodRevenue > 0, "");
+    function _withdrawRevenueShare(address account_) internal virtual {
+        require(lastRevenuePeriodRevenue > 0, "RevenueSplitter::_withdrawRevenueShare: ZERO_REVENUE");
 
         uint256 withdrawlPower = _getCurWithdrawlPower(account_);
 
-        require(withdrawlPower > 0, "");
+        require(withdrawlPower > 0, "RevenueSplitter::_withdrawRevenueShare: ZERO_WITHDRAWL_POWER");
 
-        uint256 share = withdrawlPower / totalSupply();
-        uint256 ethShare = share / lastRevenuePeriodRevenue;
+        // TODO will this work w/ miniscule shares?
+        uint256 share = (withdrawlPower * 1000) / totalSupply();
+        uint256 ethShare = share * (lastRevenuePeriodRevenue / 1000);
 
         withdrawlReceipts[curRevenuePeriodId - 1][account_] += withdrawlPower;
         (bool success, ) = account_.call{ value: ethShare }("");
-        require(success, "");
+        require(success, "RevenueSplitter::_withdrawRevenueShare: REQUEST_FAILED");
         // TODO handle bytes error message
-        // TODO emit code
+        // TODO emit event
     }
 
     // TODO return `exercisedTokensCount`?
@@ -243,6 +237,7 @@ contract RevenueSplitter is ERC20 {
         _beforeEndRevenuePeriod();
 
         _setLastRevenuePeriod(curRevenuePeriodDate, curRevenuePeriodRevenue, curRevenuePeriodTotalSupply);
+        // TODO use `curRevenuePeriodDate` value?
         _setCurRevenuePeriod(block.timestamp + REVENUE_PERIOD_DURATION, 0, 0);
         curRevenuePeriodId++;
 
@@ -285,6 +280,7 @@ contract RevenueSplitter is ERC20 {
 
     receive() external payable {
         _onReceive();
+        curRevenuePeriodRevenue += msg.value;
         emit PaymentReceived(msg.sender, msg.value);
     }
 
