@@ -25,27 +25,6 @@ contract RevenuePool is RevenueSplitter {
     }
 
     /* PRIMARY FEATURES */
-    // TODO overwrite _deposit() + call super.deposit() w/ msg.value less fees
-    function depositLiquidity() external payable {
-        // TODO move `getTokensLessFees()` to library
-        (uint256 amountToMint, uint256 transactionFee) = getTokensLessFees(msg.value);
-
-        amountToMint = amountToMint / exchangeRate; // TODO test
-
-        _deposit(msg.sender, amountToMint);
-
-        if (transactionFee > 0) {
-            /**
-                TODO grant equity to owner here? Just keep ETH for tsx fee?
-                I like the idea of a DAO getting equity -- can do things with it.
-                Perhaps simpler to just have the owner get ETH for transaction fees
-                Perhaps nice feature to send the tsx fee to an owner/treasury address -- for covering tsx fees
-                
-             */
-            // _mint(owner, transactionFee);
-            RevenuePoolLibrary.transferEth(owner, transactionFee);
-        }
-    }
 
     function _deposit(address account_, uint256 amount_) internal virtual override {
         // TODO move `getTokensLessFees()` to library
@@ -53,7 +32,6 @@ contract RevenuePool is RevenueSplitter {
         amountToMint = amountToMint / exchangeRate;
 
         if (transactionFee > 0) {
-            // _mint(owner, transactionFee); // TODO don't grant equity to owner here. Just keep ETH for tsx fee.
             RevenuePoolLibrary.transferEth(owner, transactionFee);
         }
 
@@ -65,7 +43,6 @@ contract RevenuePool is RevenueSplitter {
         _withdraw(msg.sender);
     }
 
-    /* OVERRIDES AND HOOKS */
     function _transfer(
         address to_,
         address from_,
@@ -76,6 +53,7 @@ contract RevenuePool is RevenueSplitter {
         (amount_, transactionFee) = getTokensLessFees(amount_);
 
         if (transactionFee > 0) {
+            // TODO burn fee or transfer equity to owner?
             super._transfer(from_, owner, transactionFee);
         }
 

@@ -20,7 +20,7 @@ const TOKEN_OPTION_ID = BigNumber.from(2);
 
 const purchaseTokens = async (pool: RevenuePool, accounts: SignerWithAddress[], amount: BigNumber) => {
   for (let i = 0; i < accounts.length; i++) {
-    await pool.connect(accounts[i]).depositLiquidity({ value: amount });
+    await pool.connect(accounts[i]).deposit({ value: amount });
   }
 };
 
@@ -56,9 +56,9 @@ describe("Unit Tests Tests", () => {
       );
     });
 
-    describe("depositLiquidity", () => {
+    describe("deposit", () => {
       it("Should purchase tokens during the first liquidity period", async () => {
-        await pool.connect(account1).depositLiquidity({ value: TWO_ETH });
+        await pool.connect(account1).deposit({ value: TWO_ETH });
 
         // expect equivalent token balance and zero token share balance
         // console.log("BALANCE: ", await pool.balanceOf(account1.address));
@@ -70,7 +70,7 @@ describe("Unit Tests Tests", () => {
         // jump to 2nd liquidity period
         await jumpLiquidityPeriods(pool, 1);
 
-        await pool.connect(account1).depositLiquidity({ value: TWO_ETH });
+        await pool.connect(account1).deposit({ value: TWO_ETH });
 
         expect(await pool.balanceOf(account1.address)).to.equal(ZERO_ETH);
         expect(await pool.balanceOfUnexercised(account1.address)).to.equal(TWO_ETH);
@@ -90,9 +90,9 @@ describe("Unit Tests Tests", () => {
       });
     });
 
-    describe.only("withdrawRevenue", () => {
+    describe("withdrawRevenue", () => {
       beforeEach(async () => {
-        // await pool.connect(account1).depositLiquidity({ value: TWO_ETH });
+        // await pool.connect(account1).deposit({ value: TWO_ETH });
 
         await purchaseTokens(pool, signers.slice(0, 10), TWO_ETH);
       });
