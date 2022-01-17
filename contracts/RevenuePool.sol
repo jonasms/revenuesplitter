@@ -2,6 +2,7 @@
 pragma solidity >=0.8.4;
 
 import "./interfaces/IRevenuePool.sol";
+import "./libraries/RevenuePoolLibrary.sol";
 import "./RevenueSplitter.sol";
 
 // TODO remove
@@ -24,20 +25,44 @@ contract RevenuePool is RevenueSplitter {
     }
 
     /* PRIMARY FEATURES */
+    // TODO overwrite _deposit() + call super.deposit() w/ msg.value less fees
     function depositLiquidity() external payable {
+        // TODO move `getTokensLessFees()` to library
         (uint256 amountToMint, uint256 transactionFee) = getTokensLessFees(msg.value);
 
-        amountToMint = amountToMint / exchangeRate;
+        amountToMint = amountToMint / exchangeRate; // TODO test
 
         _deposit(msg.sender, amountToMint);
 
         if (transactionFee > 0) {
-            _mint(owner, transactionFee);
+            /**
+                TODO grant equity to owner here? Just keep ETH for tsx fee?
+                I like the idea of a DAO getting equity -- can do things with it.
+                Perhaps simpler to just have the owner get ETH for transaction fees
+                Perhaps nice feature to send the tsx fee to an owner/treasury address -- for covering tsx fees
+                
+             */
+            // _mint(owner, transactionFee);
+            RevenuePoolLibrary.transferEth(owner, transactionFee);
         }
     }
 
+    function _deposit(address account_, uint256 amount_) internal virtual override {
+        // TODO move `getTokensLessFees()` to library
+        (uint256 amountToMint, uint256 transactionFee) = getTokensLessFees(amount_);
+        amountToMint = amountToMint / exchangeRate;
+
+        if (transactionFee > 0) {
+            // _mint(owner, transactionFee); // TODO don't grant equity to owner here. Just keep ETH for tsx fee.
+            RevenuePoolLibrary.transferEth(owner, transactionFee);
+        }
+
+        super._deposit(account_, amount_);
+    }
+
+    // TODO use RevenueSplitter::withdraw()
     function withdrawRevenue() external {
-        _withdrawRevenueShare(msg.sender);
+        _withdraw(msg.sender);
     }
 
     /* OVERRIDES AND HOOKS */

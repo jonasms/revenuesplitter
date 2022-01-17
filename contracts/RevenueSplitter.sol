@@ -8,6 +8,10 @@ import "./interfaces/IRevenueSplitter.sol";
 import "hardhat/console.sol";
 
 contract RevenueSplitter is ERC20 {
+    bytes32 private constant DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
+
+    // TODO change to 30 days?
     uint256 public constant REVENUE_PERIOD_DURATION = 90 days;
 
     /**
@@ -18,6 +22,7 @@ contract RevenueSplitter is ERC20 {
 
     address public owner;
     uint256 public maxTokenSupply;
+    uint private ethReserve;
 
     struct RevenuePeriod {
         // TODO data packing?
@@ -29,7 +34,7 @@ contract RevenueSplitter is ERC20 {
 
     struct RestrictedTokenGrant {
         // TODO data packing?
-        uint256 vestingPeriod;
+        uint256 vestingPeriod; // TODO change to `vestingDate`?
         uint256 amount;
         bool exercised;
     }
@@ -40,6 +45,7 @@ contract RevenueSplitter is ERC20 {
     uint256 public curRevenuePeriodId;
 
     // TODO convert to arrays?
+    // TODO check accessibility
     uint256 public curRevenuePeriodDate;
     uint256 private curRevenuePeriodRevenue;
     uint256 private curRevenuePeriodTotalSupply; // TODO being used?
@@ -48,6 +54,7 @@ contract RevenueSplitter is ERC20 {
     uint256 internal lastRevenuePeriodRevenue;
     uint256 private lastRevenuePeriodTotalSupply; // TODO being used?
 
+    // @dev map revenuePeriodId's to user addresses to the amount of ETH they've withdrawn in the given period
     mapping(uint256 => mapping(address => uint256)) private withdrawlReceipts;
 
     constructor(
@@ -91,6 +98,7 @@ contract RevenueSplitter is ERC20 {
             "RevenueSplitter::_deposit: MAX_TOKEN_LIMIT"
         );
 
+
         // mint tokens if in first revenue period
         // otherwise, grant restricted tokens
         // TODO make conditional more dynamic?
@@ -99,14 +107,22 @@ contract RevenueSplitter is ERC20 {
         } else {
             _createTokenGrant(account_, curRevenuePeriodId + 2, amount_);
         }
+
+        // TODO test
+        ethReserve += amount_;
     }
 
-    function _withdrawRevenueShare(address account_) internal virtual {
-        require(lastRevenuePeriodRevenue > 0, "RevenueSplitter::_withdrawRevenueShare: ZERO_REVENUE");
+    function deposit() external payable virtual {
+        uint amountDeposited = address(this).balance - ethReserve;
+        _deposit(msg.sender, amountDeposited);
+    }
+
+    function _withdraw(address account_) internal virtual {
+        require(lastRevenuePeriodRevenue > 0, "RevenueSplitter::_withdraw: ZERO_REVENUE");
 
         uint256 withdrawlPower = _getCurWithdrawlPower(account_);
 
-        require(withdrawlPower > 0, "RevenueSplitter::_withdrawRevenueShare: ZERO_WITHDRAWL_POWER");
+        require(withdrawlPower > 0, "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER");
 
         // TODO will this work w/ miniscule shares?
         uint256 share = (withdrawlPower * 1000) / totalSupply();
@@ -117,6 +133,28 @@ contract RevenueSplitter is ERC20 {
         require(success, "RevenueSplitter::_withdrawRevenueShare: REQUEST_FAILED");
         // TODO handle bytes error message
         // TODO emit event
+    }
+
+    // TODO withdraw
+
+    function withdrawBulk(
+        uint8[] calldata vList_,
+        bytes32[] calldata rList_,
+        bytes32[] calldata sList_
+    ) external {
+        require(vList_.length == rList_.length, "RevenueSplitter::withdrawBulk: INFORMATION_ARITY_MISMATCH_R_LIST");
+        require(vList_.length == sList_.length, "RevenueSplitter::withdrawBulk: INFORMATION_ARITY_MISMATCH_S_LIST");
+        bytes32 domainSeparator = keccak256(
+            abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator));
+        address signer;
+
+        for (uint256 i = 0; i < vList_.length; i++) {
+            /* Get Signer */
+            signer = ecrecover(digest, vList_[i], rList_[i], sList_[i]);
+            _withdraw(signer);
+        }
     }
 
     // TODO return `exercisedTokensCount`?
@@ -165,12 +203,13 @@ contract RevenueSplitter is ERC20 {
         return _getCurWithdrawlPower(msg.sender);
     }
 
+    // prevent tokens being used for a withdrawl more than once per revenue period
+    // allows transfer of tokens that have been used to withdraw funds in the current period
     function _transfer(
         address to_,
         address from_,
         uint256 amount_
     ) internal virtual override {
-        // prevent tokens being used for a withdrawl more than once per revenue period
         uint256 fromWithdrawlPower = _getCurWithdrawlPower(from_);
 
         uint256 withdrawlReceiptTransfer = amount_ >= fromWithdrawlPower ? amount_ - fromWithdrawlPower : amount_;
@@ -182,6 +221,7 @@ contract RevenueSplitter is ERC20 {
         //  to_ user should only be able to withdraw up to the amt of tokens just reedemed
 
         withdrawlReceipts[curRevenuePeriodId - 1][to_] += withdrawlReceiptTransfer;
+        // TODO reduce from_'s withdrawn amount
 
         super._transfer(from_, to_, amount_);
     }
@@ -238,6 +278,8 @@ contract RevenueSplitter is ERC20 {
 
         _setLastRevenuePeriod(curRevenuePeriodDate, curRevenuePeriodRevenue, curRevenuePeriodTotalSupply);
         // TODO use `curRevenuePeriodDate` value?
+
+        // TODO set curPeriod revenue to remaining lastPeriod revenue
         _setCurRevenuePeriod(block.timestamp + REVENUE_PERIOD_DURATION, 0, 0);
         curRevenuePeriodId++;
 
@@ -292,7 +334,17 @@ contract RevenueSplitter is ERC20 {
         maxTokenSupply = maxTokenSupply_;
     }
 
+    /* UTILS */
+    function getChainId() internal view returns (uint256) {
+        uint256 chainId;
+        assembly {
+            chainId := chainid()
+        }
+        return chainId;
+    }
+
     /* HOOKS */
+    // TODO add params to fxns
     function _beforeTokenUnexercisedTransfer() internal virtual {}
 
     function _afterTokenUnexercisedTransfer() internal virtual {}
