@@ -22,7 +22,6 @@ contract RevenueSplitter is ERC20 {
 
     address public owner;
     uint256 public maxTokenSupply;
-    uint private ethReserve;
 
     struct RevenuePeriod {
         // TODO data packing?
@@ -98,7 +97,6 @@ contract RevenueSplitter is ERC20 {
             "RevenueSplitter::_deposit: MAX_TOKEN_LIMIT"
         );
 
-
         // mint tokens if in first revenue period
         // otherwise, grant restricted tokens
         // TODO make conditional more dynamic?
@@ -107,14 +105,10 @@ contract RevenueSplitter is ERC20 {
         } else {
             _createTokenGrant(account_, curRevenuePeriodId + 2, amount_);
         }
-
-        // TODO test
-        ethReserve += amount_;
     }
 
     function deposit() external payable virtual {
-        uint amountDeposited = address(this).balance - ethReserve;
-        _deposit(msg.sender, amountDeposited);
+        _deposit(msg.sender, msg.value);
     }
 
     function _withdraw(address account_) internal virtual {
@@ -135,7 +129,9 @@ contract RevenueSplitter is ERC20 {
         // TODO emit event
     }
 
-    // TODO withdraw
+    function withdraw() external virtual {
+        _withdraw(msg.sender);
+    }
 
     function withdrawBulk(
         uint8[] calldata vList_,

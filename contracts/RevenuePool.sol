@@ -25,7 +25,6 @@ contract RevenuePool is RevenueSplitter {
     }
 
     /* PRIMARY FEATURES */
-
     function _deposit(address account_, uint256 amount_) internal virtual override {
         // TODO move `getTokensLessFees()` to library
         (uint256 amountToMint, uint256 transactionFee) = getTokensLessFees(amount_);
@@ -36,11 +35,6 @@ contract RevenuePool is RevenueSplitter {
         }
 
         super._deposit(account_, amount_);
-    }
-
-    // TODO use RevenueSplitter::withdraw()
-    function withdrawRevenue() external {
-        _withdraw(msg.sender);
     }
 
     function _transfer(

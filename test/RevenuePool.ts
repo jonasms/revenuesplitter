@@ -90,7 +90,7 @@ describe("Unit Tests Tests", () => {
       });
     });
 
-    describe("withdrawRevenue", () => {
+    describe("withdraw", () => {
       beforeEach(async () => {
         // await pool.connect(account1).deposit({ value: TWO_ETH });
 
@@ -107,13 +107,13 @@ describe("Unit Tests Tests", () => {
 
         const balanceBeforeWithdrawl: BigNumber = await account1.getBalance();
 
-        await pool.connect(account1).withdrawRevenue();
+        await pool.connect(account1).withdraw();
 
         const balanceAfterWithdrawl: BigNumber = await account1.getBalance();
 
         const amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
 
-        // Should be 0.9 ETH less gas fees for executing withdrawRevenue()
+        // Should be 0.9 ETH less gas fees for executing withdraw()
         expect(amountWithdrawn).gte(parseEther("0.899"));
       });
       //  - cannot withdraw, transfer tokens, withraw again using same tokens
