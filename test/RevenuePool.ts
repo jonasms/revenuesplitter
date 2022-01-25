@@ -126,6 +126,7 @@ describe("Unit Tests Tests", () => {
       let types: any;
       let domain: any;
       let lastRevenuePeriodDate: BigNumber;
+      let _signers: SignerWithAddress[] = [];
 
       beforeEach(async () => {
         types = {
@@ -147,25 +148,22 @@ describe("Unit Tests Tests", () => {
         const curPeriod = (await pool.queryFilter(filters))[0];
         lastRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
 
-        const _signers = signers.slice(0, 5);
-        await purchaseTokens(pool, _signers, TWO_ETH);
+        _signers = signers.slice(0, 6);
+        // Last signer is not to be a valid owner of LP tokens
+        await purchaseTokens(pool, _signers.slice(0, 5), TWO_ETH);
 
         const message = { date: lastRevenuePeriodDate };
 
         for (let i = 0; i < _signers.length; i++) {
-          console.log(`SIGNER ${i + 1}: ${_signers[i].address}`);
           signatures.push(await _signers[i]._signTypedData(domain, types, message));
         }
-        console.log(`SIGNER 6: `, signers[6].address);
       });
 
       it("Should withdraw for several accounts", async () => {
-        // create 1 invalid signature
-        const notAnOwner = signers[6];
-        const invalidSig = await notAnOwner._signTypedData(domain, types, {
-          date: lastRevenuePeriodDate,
-        });
-        signatures.push(invalidSig);
+        const balancesBeforeWithrawl: BigNumber[] = [];
+        for (let i = 0; i < _signers.length; i++) {
+          balancesBeforeWithrawl.push(await _signers[i].getBalance());
+        }
 
         const periodDateList: BigNumber[] = [];
         const vList: any[] = [];
@@ -186,11 +184,23 @@ describe("Unit Tests Tests", () => {
         });
 
         await jumpRevenuePeriods(pool, 1);
-        // TODO end current revenuePeriod
 
         await pool.withdrawBulk(periodDateList, vList, rList, sList);
 
-        // test withdraw worked
+        const balancesAfterWithrawl: BigNumber[] = [];
+        for (let i = 0; i < _signers.length; i++) {
+          balancesAfterWithrawl.push(await _signers[i].getBalance());
+        }
+
+        const expectedBalancesAfterWithdrawl = balancesBeforeWithrawl.map((balance, idx) => {
+          // Only expect an increased balance for the first n - 1 wallets
+          if (idx < balancesBeforeWithrawl.length - 1) {
+            return balance.add(TWO_ETH);
+          }
+          return balance;
+        });
+
+        expect(balancesAfterWithrawl).to.deep.equals(expectedBalancesAfterWithdrawl);
       });
     });
 

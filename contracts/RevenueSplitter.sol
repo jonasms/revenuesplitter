@@ -128,7 +128,6 @@ contract RevenueSplitter is ERC20 {
     }
 
     function _withdraw(address account_) internal virtual {
-        console.log("ACCOUNT: ", account_);
         require(lastRevenuePeriodRevenue > 0, "RevenueSplitter::_withdraw: ZERO_REVENUE");
 
         uint256 withdrawlPower = _getCurWithdrawlPower(account_);
@@ -151,15 +150,11 @@ contract RevenueSplitter is ERC20 {
     }
 
     function withdrawBySig(
-        // string calldata message,
         uint256 revenuePeriodDate_,
         uint8 v_,
         bytes32 r_,
         bytes32 s_
     ) external {
-        // bytes32 transactionHash = keccak256(abi.encodePacked("\x19\x01", address(this), message));
-        // address signer = ecrecover(transactionHash, v, r, s);
-
         bytes32 domainSeparator = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
         );
@@ -173,7 +168,6 @@ contract RevenueSplitter is ERC20 {
     }
 
     function withdrawBulk(
-        // string[] calldata messageList_,
         uint256[] calldata datesList_,
         uint8[] calldata vList_,
         bytes32[] calldata rList_,
