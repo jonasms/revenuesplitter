@@ -9,11 +9,12 @@ import { BigNumber } from "ethers";
 
 const { utils } = ethers;
 const { parseEther } = utils;
+const { provider } = waffle;
 
 const ZERO_ETH = BigNumber.from(0);
 const ONE_ETH = parseEther("1");
 const TWO_ETH = parseEther("2");
-const LIQUIDITY_PERIOD = 1000 * 60 * 60 * 90; // 90 days
+const REVENUE_PERIOD = 1000 * 60 * 60 * 90; // 90 days
 const ONE_DAY = 1000 * 60 * 60;
 const TOKEN_ID = BigNumber.from(1);
 const TOKEN_OPTION_ID = BigNumber.from(2);
@@ -24,9 +25,9 @@ const purchaseTokens = async (pool: RevenuePool, accounts: SignerWithAddress[], 
   }
 };
 
-const jumpLiquidityPeriods = async (pool: RevenuePool, n: number) => {
+const jumpRevenuePeriods = async (pool: RevenuePool, n: number) => {
   for (let i = 0; i < n; i++) {
-    await network.provider.send("evm_increaseTime", [LIQUIDITY_PERIOD + ONE_DAY]);
+    await network.provider.send("evm_increaseTime", [REVENUE_PERIOD + ONE_DAY]);
     await pool.endRevenuePeriod();
   }
 };
@@ -68,7 +69,7 @@ describe("Unit Tests Tests", () => {
 
       it("Should purchase token shares after the first liquidity period", async () => {
         // jump to 2nd liquidity period
-        await jumpLiquidityPeriods(pool, 1);
+        await jumpRevenuePeriods(pool, 1);
 
         await pool.connect(account1).deposit({ value: TWO_ETH });
 
@@ -92,8 +93,7 @@ describe("Unit Tests Tests", () => {
 
     describe("withdraw", () => {
       beforeEach(async () => {
-        // await pool.connect(account1).deposit({ value: TWO_ETH });
-
+        // TODO reduce signer count from 10 to 5
         await purchaseTokens(pool, signers.slice(0, 10), TWO_ETH);
       });
       //  - can withdraw correct amount
@@ -103,7 +103,7 @@ describe("Unit Tests Tests", () => {
           value: parseEther("9"),
         });
 
-        await jumpLiquidityPeriods(pool, 1);
+        await jumpRevenuePeriods(pool, 1);
 
         const balanceBeforeWithdrawl: BigNumber = await account1.getBalance();
 
@@ -120,6 +120,80 @@ describe("Unit Tests Tests", () => {
       // it("Should prevent tokens being used to withdraw more than once in a given period", () => {});
     });
 
+    describe.only("withdrawBulk", () => {
+      const signatures: string[] = [];
+
+      let types: any;
+      let domain: any;
+      let lastRevenuePeriodDate: BigNumber;
+
+      beforeEach(async () => {
+        types = {
+          LastRevenuePeriod: [{ name: "date", type: "uint256" }],
+        };
+        domain = {
+          /** contract name
+           * In this case retrieved from a contract method that returns a string.
+           * Using a method to insure against a typo.
+           **/
+          // name: await pool.name(),
+          name: "Web3 Revenue Pool",
+          chainId: (await provider.getNetwork()).chainId, // get chain id from ethers
+          verifyingContract: pool.address, // contract address
+        };
+
+        // Get first "StartPeriod" event
+        const filters = pool.filters.StartPeriod();
+        const curPeriod = (await pool.queryFilter(filters))[0];
+        lastRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
+
+        const _signers = signers.slice(0, 5);
+        await purchaseTokens(pool, _signers, TWO_ETH);
+
+        const message = { date: lastRevenuePeriodDate };
+
+        for (let i = 0; i < _signers.length; i++) {
+          console.log(`SIGNER ${i + 1}: ${_signers[i].address}`);
+          signatures.push(await _signers[i]._signTypedData(domain, types, message));
+        }
+        console.log(`SIGNER 6: `, signers[6].address);
+      });
+
+      it("Should withdraw for several accounts", async () => {
+        // create 1 invalid signature
+        const notAnOwner = signers[6];
+        const invalidSig = await notAnOwner._signTypedData(domain, types, {
+          date: lastRevenuePeriodDate,
+        });
+        signatures.push(invalidSig);
+
+        const periodDateList: BigNumber[] = [];
+        const vList: any[] = [];
+        const rList: any[] = [];
+        const sList: any[] = [];
+
+        signatures.forEach((sig: any) => {
+          periodDateList.push(lastRevenuePeriodDate);
+          const { v, r, s } = ethers.utils.splitSignature(sig);
+          vList.push(v);
+          rList.push(r);
+          sList.push(s);
+        });
+
+        await admin.sendTransaction({
+          to: pool.address,
+          value: parseEther("10"),
+        });
+
+        await jumpRevenuePeriods(pool, 1);
+        // TODO end current revenuePeriod
+
+        await pool.withdrawBulk(periodDateList, vList, rList, sList);
+
+        // test withdraw worked
+      });
+    });
+
     describe("redeem", () => {
       // beforeEach(async () => {
       // });
@@ -132,7 +206,7 @@ describe("Unit Tests Tests", () => {
 
       it("Should fail if options haven't vested yet", async () => {
         // jump to 2nd liquidity period
-        await jumpLiquidityPeriods(pool, 1);
+        await jumpRevenuePeriods(pool, 1);
 
         // purchase token options
         await purchaseTokens(pool, signers, TWO_ETH);
@@ -145,14 +219,14 @@ describe("Unit Tests Tests", () => {
       // Should only exercise unexercised vested tokens
       it("Should only exercise unexercised vested tokens", async () => {
         // jump to 2nd liquidity period
-        await jumpLiquidityPeriods(pool, 1);
+        await jumpRevenuePeriods(pool, 1);
 
         // purchase token options
         await purchaseTokens(pool, signers, TWO_ETH);
 
         // jump to 4th liquidity period
         // where purchased token shares can be exercised
-        await jumpLiquidityPeriods(pool, 2);
+        await jumpRevenuePeriods(pool, 2);
 
         expect(await pool.balanceOf(account1.address)).to.equal(ZERO_ETH);
         expect(await pool.balanceOfUnexercised(account1.address)).to.equal(TWO_ETH);
@@ -168,10 +242,10 @@ describe("Unit Tests Tests", () => {
         // increase `n` in order to see how much `redeem()` costs as
         // the number of token purchases for a given user scales
         const n = 20;
-        await jumpLiquidityPeriods(pool, 1);
+        await jumpRevenuePeriods(pool, 1);
         for (let i = 0; i < n; i++) {
           await purchaseTokens(pool, [account1], TWO_ETH);
-          await jumpLiquidityPeriods(pool, 2);
+          await jumpRevenuePeriods(pool, 2);
           await pool.connect(account1).redeem();
         }
 
