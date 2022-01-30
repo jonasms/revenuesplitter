@@ -12,8 +12,8 @@ contract RevenueSplitter is ERC20 {
     bytes32 private constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
 
-    /// @notice The EIP-712 typehash for the ballot struct used by the contract
-    bytes32 private constant BALLOT_TYPEHASH = keccak256("LastRevenuePeriod(uint256 date)");
+    /// @notice The EIP-712 typehash for the revenue period timestamp used by the contract
+    bytes32 private constant REVENUE_PERIOD_DATE_TYPEHASH = keccak256("LastRevenuePeriod(uint256 date)");
 
     // TODO change to 30 days?
     uint256 public constant REVENUE_PERIOD_DURATION = 90 days;
@@ -155,10 +155,13 @@ contract RevenueSplitter is ERC20 {
         bytes32 r_,
         bytes32 s_
     ) external {
+        // TODO require that revenuePeriodDate_ == lastRevenuePeriodDate; INVALID_REVENUE_PERIOD_DATE
+        // In order to insure that the withdrawl authorization is for the current withdrawl period
+
         bytes32 domainSeparator = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
         );
-        bytes32 structHash = keccak256(abi.encode(BALLOT_TYPEHASH, revenuePeriodDate_));
+        bytes32 structHash = keccak256(abi.encode(REVENUE_PERIOD_DATE_TYPEHASH, revenuePeriodDate_));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         address signer = ecrecover(digest, v_, r_, s_);
 
@@ -193,11 +196,12 @@ contract RevenueSplitter is ERC20 {
     // TODO return `exercisedTokensCount`?
     // TODO make internal, takes an `address to_` param
     // Exercise vested tokens
-    function redeem() public returns (uint256 exercisedTokensCount) {
-        RestrictedTokenGrant[] storage tokenGrants = _tokenGrants[msg.sender];
+    function _redeem(address account_) internal virtual {
+        RestrictedTokenGrant[] storage tokenGrants = _tokenGrants[account_];
 
         require(tokenGrants.length > 0, "RevenueSplitter::redeem: ZERO_TOKEN_PURCHASES");
 
+        uint256 exercisedTokensCount;
         for (uint256 i = 0; i < tokenGrants.length; i++) {
             if (tokenGrants[i].vestingPeriod <= curRevenuePeriodId && !tokenGrants[i].exercised) {
                 tokenGrants[i].exercised = true;
@@ -207,14 +211,62 @@ contract RevenueSplitter is ERC20 {
 
         require(exercisedTokensCount > 0, "RevenueSplitter::redeem: ZERO_EXERCISABLE_SHARES");
 
-        // TODO decrease _totalSupplyRestricted by exercisedTokensCount
         _totalSupplyUnexercised -= exercisedTokensCount;
-        _mint(msg.sender, exercisedTokensCount);
+        _mint(account_, exercisedTokensCount);
 
-        emit Redeem(msg.sender, curRevenuePeriodId, exercisedTokensCount);
+        emit Redeem(account_, curRevenuePeriodId, exercisedTokensCount);
     }
 
-    // TODO redeemBatched()
+    function redeem() external virtual {
+        _redeem(msg.sender);
+    }
+
+    function redeemBySig(
+        uint256 revenuePeriodDate_,
+        uint8 v_,
+        bytes32 r_,
+        bytes32 s_
+    ) external {
+        require(
+            revenuePeriodDate_ == curRevenuePeriodDate,
+            "RevenueSplitter::redeemBySig: INVALID_REVENUE_PERIOD_DATE"
+        );
+
+        bytes32 domainSeparator = keccak256(
+            abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
+        );
+        bytes32 structHash = keccak256(abi.encode(REVENUE_PERIOD_DATE_TYPEHASH, revenuePeriodDate_));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        address signer = ecrecover(digest, v_, r_, s_);
+
+        require(signer != address(0), "RevenueSplitter::redeemBySig: INVALID_SIGNATURE");
+
+        _redeem(signer);
+    }
+
+    // TODO use common function with withdrawBulk() in order to reduce contract size?
+    function redeemBulk(
+        uint256[] calldata datesList_,
+        uint8[] calldata vList_,
+        bytes32[] calldata rList_,
+        bytes32[] calldata sList_
+    ) external {
+        require(datesList_.length == vList_.length, "RevenueSplitter::withdrawBulk: INFORMATION_ARITY_MISMATCH_V_LIST");
+        require(datesList_.length == rList_.length, "RevenueSplitter::withdrawBulk: INFORMATION_ARITY_MISMATCH_R_LIST");
+        require(datesList_.length == sList_.length, "RevenueSplitter::withdrawBulk: INFORMATION_ARITY_MISMATCH_S_LIST");
+
+        for (uint256 i = 0; i < vList_.length; i++) {
+            address(this).call(
+                abi.encodeWithSignature(
+                    "redeemBySig(uint256,uint8,bytes32,bytes32)",
+                    datesList_[i],
+                    vList_[i],
+                    rList_[i],
+                    sList_[i]
+                )
+            );
+        }
+    }
 
     // TODO rename
     function _createTokenGrant(
