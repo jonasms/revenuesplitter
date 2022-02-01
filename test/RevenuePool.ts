@@ -120,24 +120,45 @@ describe("Unit Tests Tests", () => {
       // it("Should prevent tokens being used to withdraw more than once in a given period", () => {});
     });
 
-    describe.only("withdrawBulk", () => {
-      const signatures: string[] = [];
-
-      let types: any;
-      let domain: any;
-      let lastRevenuePeriodDate: BigNumber;
-      let _signers: SignerWithAddress[] = [];
-
-      beforeEach(async () => {
-        types = {
+    describe.only("withdrawBySig", () => {
+      it("Should fail due to INVALID_REVENUE_PERIOD_DATE", async () => {
+        const types = {
           LastRevenuePeriod: [{ name: "date", type: "uint256" }],
         };
-        domain = {
-          /** contract name
-           * In this case retrieved from a contract method that returns a string.
-           * Using a method to insure against a typo.
-           **/
-          // name: await pool.name(),
+        const domain = {
+          name: "Web3 Revenue Pool",
+          chainId: (await provider.getNetwork()).chainId, // get chain id from ethers
+          verifyingContract: pool.address, // contract address
+        };
+
+        const filters = pool.filters.StartPeriod();
+        const curPeriod = (await pool.queryFilter(filters))[0];
+        const lastRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
+
+        await purchaseTokens(pool, [account1], TWO_ETH);
+
+        const message = { date: lastRevenuePeriodDate };
+        const signature = await account1._signTypedData(domain, types, message);
+        const { v, r, s } = ethers.utils.splitSignature(signature);
+
+        // Jumping 2 revenue periods will invalidate withdrawl requests from the
+        // `lastRevenuePeriodDate` revenue period because that time stamp no longer the
+        // represents the most recently ended revenue period.
+        await jumpRevenuePeriods(pool, 2);
+        await expect(pool.withdrawBySig(lastRevenuePeriodDate, v, r, s)).to.be.revertedWith(
+          "RevenueSplitter::withdrawBySig: INVALID_REVENUE_PERIOD_DATE",
+        );
+      });
+    });
+
+    describe("withdrawBulk", () => {
+      const signatures: string[] = [];
+
+      it("Should withdraw for several accounts", async () => {
+        const types = {
+          LastRevenuePeriod: [{ name: "date", type: "uint256" }],
+        };
+        const domain = {
           name: "Web3 Revenue Pool",
           chainId: (await provider.getNetwork()).chainId, // get chain id from ethers
           verifyingContract: pool.address, // contract address
@@ -146,20 +167,17 @@ describe("Unit Tests Tests", () => {
         // Get first "StartPeriod" event
         const filters = pool.filters.StartPeriod();
         const curPeriod = (await pool.queryFilter(filters))[0];
-        lastRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
+        const lastRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
+        const _signers = signers.slice(0, 6);
 
-        _signers = signers.slice(0, 6);
         // Last signer is not to be a valid owner of LP tokens
         await purchaseTokens(pool, _signers.slice(0, 5), TWO_ETH);
-
         const message = { date: lastRevenuePeriodDate };
 
         for (let i = 0; i < _signers.length; i++) {
           signatures.push(await _signers[i]._signTypedData(domain, types, message));
         }
-      });
 
-      it("Should withdraw for several accounts", async () => {
         const balancesBeforeWithrawl: BigNumber[] = [];
         for (let i = 0; i < _signers.length; i++) {
           balancesBeforeWithrawl.push(await _signers[i].getBalance());

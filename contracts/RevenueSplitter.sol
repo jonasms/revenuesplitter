@@ -155,8 +155,10 @@ contract RevenueSplitter is ERC20 {
         bytes32 r_,
         bytes32 s_
     ) external {
-        // TODO require that revenuePeriodDate_ == lastRevenuePeriodDate; INVALID_REVENUE_PERIOD_DATE
-        // In order to insure that the withdrawl authorization is for the current withdrawl period
+        require(
+            revenuePeriodDate_ == lastRevenuePeriodDate,
+            "RevenueSplitter::withdrawBySig: INVALID_REVENUE_PERIOD_DATE"
+        );
 
         bytes32 domainSeparator = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
@@ -193,9 +195,6 @@ contract RevenueSplitter is ERC20 {
         }
     }
 
-    // TODO return `exercisedTokensCount`?
-    // TODO make internal, takes an `address to_` param
-    // Exercise vested tokens
     function _redeem(address account_) internal virtual {
         RestrictedTokenGrant[] storage tokenGrants = _tokenGrants[account_];
 
@@ -244,16 +243,15 @@ contract RevenueSplitter is ERC20 {
         _redeem(signer);
     }
 
-    // TODO use common function with withdrawBulk() in order to reduce contract size?
     function redeemBulk(
         uint256[] calldata datesList_,
         uint8[] calldata vList_,
         bytes32[] calldata rList_,
         bytes32[] calldata sList_
     ) external {
-        require(datesList_.length == vList_.length, "RevenueSplitter::withdrawBulk: INFORMATION_ARITY_MISMATCH_V_LIST");
-        require(datesList_.length == rList_.length, "RevenueSplitter::withdrawBulk: INFORMATION_ARITY_MISMATCH_R_LIST");
-        require(datesList_.length == sList_.length, "RevenueSplitter::withdrawBulk: INFORMATION_ARITY_MISMATCH_S_LIST");
+        require(datesList_.length == vList_.length, "RevenueSplitter::redeemBulk: INFORMATION_ARITY_MISMATCH_V_LIST");
+        require(datesList_.length == rList_.length, "RevenueSplitter::redeemBulk: INFORMATION_ARITY_MISMATCH_R_LIST");
+        require(datesList_.length == sList_.length, "RevenueSplitter::redeemBulk: INFORMATION_ARITY_MISMATCH_S_LIST");
 
         for (uint256 i = 0; i < vList_.length; i++) {
             address(this).call(
