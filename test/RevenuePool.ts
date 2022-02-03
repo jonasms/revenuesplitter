@@ -120,7 +120,7 @@ describe("Unit Tests Tests", () => {
       // it("Should prevent tokens being used to withdraw more than once in a given period", () => {});
     });
 
-    describe.only("withdrawBySig", () => {
+    describe("withdrawBySig", () => {
       it("Should fail due to INVALID_REVENUE_PERIOD_DATE", async () => {
         const types = {
           LastRevenuePeriod: [{ name: "date", type: "uint256" }],
@@ -151,19 +151,10 @@ describe("Unit Tests Tests", () => {
       });
     });
 
-    describe("withdrawBulk", () => {
+    describe.only("withdrawBulk", () => {
       const signatures: string[] = [];
 
       it("Should withdraw for several accounts", async () => {
-        const types = {
-          LastRevenuePeriod: [{ name: "date", type: "uint256" }],
-        };
-        const domain = {
-          name: "Web3 Revenue Pool",
-          chainId: (await provider.getNetwork()).chainId, // get chain id from ethers
-          verifyingContract: pool.address, // contract address
-        };
-
         // Get first "StartPeriod" event
         const filters = pool.filters.StartPeriod();
         const curPeriod = (await pool.queryFilter(filters))[0];
@@ -172,6 +163,15 @@ describe("Unit Tests Tests", () => {
 
         // Last signer is not to be a valid owner of LP tokens
         await purchaseTokens(pool, _signers.slice(0, 5), TWO_ETH);
+
+        const types = {
+          LastRevenuePeriod: [{ name: "date", type: "uint256" }],
+        };
+        const domain = {
+          name: "Web3 Revenue Pool",
+          chainId: (await provider.getNetwork()).chainId, // get chain id from ethers
+          verifyingContract: pool.address, // contract address
+        };
         const message = { date: lastRevenuePeriodDate };
 
         for (let i = 0; i < _signers.length; i++) {
@@ -218,7 +218,7 @@ describe("Unit Tests Tests", () => {
           return balance;
         });
 
-        expect(balancesAfterWithrawl).to.deep.equals(expectedBalancesAfterWithdrawl);
+        expect(balancesAfterWithrawl).to.deep.equal(expectedBalancesAfterWithdrawl);
       });
     });
 
@@ -265,12 +265,15 @@ describe("Unit Tests Tests", () => {
         expect(await pool.balanceOfUnexercised(account1.address)).to.equal(ZERO_ETH);
       });
 
+      /**
+       * This is a stress test to insure that `redeem()` scales well as
+       * the number of token purchases (list items) increases.
+       */
       it("Should work with 10 purchase records over time", async () => {
-        // repeat n times
-        // increase `n` in order to see how much `redeem()` costs as
-        // the number of token purchases for a given user scales
-        const n = 20;
+        const n = 10;
+        // Unexercised tokens cannot be purchased in the 1st revenue period.
         await jumpRevenuePeriods(pool, 1);
+
         for (let i = 0; i < n; i++) {
           await purchaseTokens(pool, [account1], TWO_ETH);
           await jumpRevenuePeriods(pool, 2);
@@ -280,7 +283,77 @@ describe("Unit Tests Tests", () => {
         expect(await pool.balanceOf(account1.address)).to.equal(TWO_ETH.mul(n));
         expect(await pool.balanceOfUnexercised(account1.address)).to.equal(ZERO_ETH);
       });
-      // Should throw an error if no unexercised vested tokens
+      // TODO Should throw an error if no unexercised vested tokens
+    });
+
+    // TODO skip?
+    describe("redeemBySig", () => {
+      // it("Should fail due to INVALID_REVENUE_PERIOD_DATE", async () => {});
+    });
+
+    describe("redeemBulk", () => {
+      it("Should redeem for several accounts", async () => {
+        const _signers = signers.slice(0, 6);
+        const signatures: string[] = [];
+
+        // Unexercised tokens cannot be purchased in the 1st revenue period.
+        await jumpRevenuePeriods(pool, 1);
+
+        // Last signer is not to be a valid owner of Unexercised Tokens
+        await purchaseTokens(pool, _signers.slice(0, 5), TWO_ETH);
+
+        // jump to 4th liquidity period
+        // where purchased token shares can be exercised
+        await jumpRevenuePeriods(pool, 2);
+
+        const filters = pool.filters.StartPeriod();
+        const curPeriod = (await pool.queryFilter(filters))[3];
+        const curRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
+
+        const types = {
+          LastRevenuePeriod: [{ name: "date", type: "uint256" }],
+        };
+        const domain = {
+          name: "Web3 Revenue Pool",
+          chainId: (await provider.getNetwork()).chainId, // get chain id from ethers
+          verifyingContract: pool.address, // contract address
+        };
+        const message = { date: curRevenuePeriodDate };
+
+        for (let i = 0; i < _signers.length; i++) {
+          signatures.push(await _signers[i]._signTypedData(domain, types, message));
+        }
+
+        const periodDateList: BigNumber[] = [];
+        const vList: any[] = [];
+        const rList: any[] = [];
+        const sList: any[] = [];
+
+        signatures.forEach((sig: any) => {
+          periodDateList.push(curRevenuePeriodDate);
+          const { v, r, s } = ethers.utils.splitSignature(sig);
+          vList.push(v);
+          rList.push(r);
+          sList.push(s);
+        });
+
+        await pool.redeemBulk(periodDateList, vList, rList, sList);
+
+        const actualBalances: BigNumber[] = [];
+        for (let i = 0; i < _signers.length; i++) {
+          actualBalances.push(await pool.balanceOf(_signers[i].address));
+        }
+
+        const expectedBalances = [TWO_ETH, TWO_ETH, TWO_ETH, TWO_ETH, TWO_ETH, ZERO_ETH];
+
+        /**
+         * Placing the `expect`s in a loop to bypass a bug with Chai.
+         * `expect(actualBalances).to.deep.equals(expectedBalances)` doesn't work while method does.
+         */
+        _signers.forEach((_, idx) => {
+          expect(actualBalances[idx]).to.deep.equal(expectedBalances[idx]);
+        });
+      });
     });
 
     // TODO test tsx fees
