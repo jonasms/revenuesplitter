@@ -15,6 +15,7 @@ const ZERO_ETH = BigNumber.from(0);
 const ONE_ETH = parseEther("1");
 const TWO_ETH = parseEther("2");
 const REVENUE_PERIOD = 1000 * 60 * 60 * 30; // 30 days
+const BLACKOUT_PERIOD = 1000 * 60 * 60 * 3; // 3 days
 const ONE_DAY = 1000 * 60 * 60;
 const TOKEN_ID = BigNumber.from(1);
 const TOKEN_OPTION_ID = BigNumber.from(2);
@@ -25,10 +26,17 @@ const purchaseTokens = async (pool: RevenuePool, accounts: SignerWithAddress[], 
   }
 };
 
-const jumpPeriods = async (pool: RevenuePool, n: number) => {
+const jumpPeriods = async (pool: RevenuePool, n: number, skipBlackout?: boolean) => {
+  let blackoutDuration;
+
   for (let i = 0; i < n; i++) {
+    blackoutDuration = skipBlackout && i == n - 1 ? BLACKOUT_PERIOD : 0;
+
     await network.provider.send("evm_increaseTime", [REVENUE_PERIOD + ONE_DAY]);
     await pool.endPeriod();
+    if (blackoutDuration) {
+      await network.provider.send("evm_increaseTime", [blackoutDuration]);
+    }
   }
 };
 
@@ -103,7 +111,7 @@ describe("Unit Tests Tests", () => {
           value: parseEther("9"),
         });
 
-        await jumpPeriods(pool, 1);
+        await jumpPeriods(pool, 1, true);
 
         const balanceBeforeWithdrawl: BigNumber = await account1.getBalance();
 
@@ -144,7 +152,7 @@ describe("Unit Tests Tests", () => {
         // Jumping 2 revenue periods will invalidate withdrawl requests from the
         // `lastPeriodDate` revenue period because that time stamp no longer the
         // represents the most recently ended revenue period.
-        await jumpPeriods(pool, 2);
+        await jumpPeriods(pool, 2, true);
         await expect(pool.withdrawBySig(lastPeriodDate, v, r, s)).to.be.revertedWith(
           "RevenueSplitter::withdrawBySig: INVALID_REVENUE_PERIOD_DATE",
         );
@@ -201,7 +209,7 @@ describe("Unit Tests Tests", () => {
           value: parseEther("10"),
         });
 
-        await jumpPeriods(pool, 1);
+        await jumpPeriods(pool, 1, true);
 
         await pool.withdrawBulk(periodDateList, vList, rList, sList);
 
@@ -304,11 +312,13 @@ describe("Unit Tests Tests", () => {
 
         // jump to 4th liquidity period
         // where purchased token shares can be exercised
-        await jumpPeriods(pool, 2);
+        await jumpPeriods(pool, 1);
 
         const filters = pool.filters.StartPeriod();
-        const curPeriod = (await pool.queryFilter(filters))[3];
+        const curPeriod = (await pool.queryFilter(filters))[2];
         const curPeriodDate = curPeriod.args.revenuePeriodDate;
+
+        await jumpPeriods(pool, 1);
 
         const types = {
           LastPeriod: [{ name: "date", type: "uint256" }],

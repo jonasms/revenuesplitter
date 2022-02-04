@@ -98,8 +98,9 @@ contract RevenueSplitter is ERC20 {
         }
     }
 
-    function _isBlackoutPeriod() internal returns (bool) {
-        return BLACKOUT_PERIOD_DURATION >= block.timestamp - curPeriodDate;
+    function _isBlackoutPeriod() internal view returns (bool) {
+        uint256 curPeriodStartTime = curPeriodDate - REVENUE_PERIOD_DURATION;
+        return BLACKOUT_PERIOD_DURATION >= block.timestamp - curPeriodStartTime;
     }
 
     // _deposit(address account_, uint amount_) internal virtual
@@ -229,7 +230,7 @@ contract RevenueSplitter is ERC20 {
         bytes32 r_,
         bytes32 s_
     ) external {
-        require(revenuePeriodDate_ == curPeriodDate, "RevenueSplitter::redeemBySig: INVALID_REVENUE_PERIOD_DATE");
+        require(revenuePeriodDate_ == lastPeriodDate, "RevenueSplitter::redeemBySig: INVALID_REVENUE_PERIOD_DATE");
 
         bytes32 domainSeparator = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
