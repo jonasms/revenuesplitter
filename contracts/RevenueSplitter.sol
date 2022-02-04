@@ -16,7 +16,8 @@ contract RevenueSplitter is ERC20 {
     bytes32 private constant REVENUE_PERIOD_DATE_TYPEHASH = keccak256("LastPeriod(uint256 date)");
 
     // TODO change to 30 days?
-    uint256 public constant REVENUE_PERIOD_DURATION = 90 days;
+    uint256 public constant REVENUE_PERIOD_DURATION = 30 days;
+    uint256 public constant BLACKOUT_PERIOD_DURATION = 3 days;
 
     /**
         Used to give users a period of time to vest unvested tokens
@@ -97,6 +98,10 @@ contract RevenueSplitter is ERC20 {
         }
     }
 
+    function _isBlackoutPeriod() internal returns (bool) {
+        return BLACKOUT_PERIOD_DURATION >= block.timestamp - curPeriodDate;
+    }
+
     // _deposit(address account_, uint amount_) internal virtual
     //  - require deposit amount less than max supply
     //  - calculates amount to mint
@@ -128,6 +133,7 @@ contract RevenueSplitter is ERC20 {
     }
 
     function _withdraw(address account_) internal virtual {
+        require(!_isBlackoutPeriod(), "RevenueSplitter::_withdraw: BLACKOUT_PERIOD");
         require(lastPeriodRevenue > 0, "RevenueSplitter::_withdraw: ZERO_REVENUE");
 
         uint256 withdrawlPower = _getCurWithdrawlPower(account_);
@@ -340,24 +346,19 @@ contract RevenueSplitter is ERC20 {
         lastPeriodTotalSupply = totalSupply_;
     }
 
-    /**
-        TESTING
-            1. Fxn reverts if the current period is currently in progress
-            2. Fxn sets `lastPeriod` and creates a new `curPeriod`
-     */
     function endPeriod() public {
         require(block.timestamp >= curPeriodDate, "RevenueSplitter::endPeriod: REVENUE_PERIOD_IN_PROGRESS");
 
         _beforeEndPeriod();
 
-        uint256 endingPeriodDate = curPeriodDate;
-        uint256 endingPeriodRevenue = curPeriodRevenue;
+        // Write to memory in order to avoid reading from storage more than once
+        // Prevent setting `lastPeriodRevenue` to an amount greater than the contract owns
+        uint256 endingPeriodRevenue = curPeriodRevenue > address(this).balance
+            ? address(this).balance
+            : curPeriodRevenue;
         uint256 endingPeriodTotalSupply = curPeriodTotalSupply;
-        _setLastPeriod(endingPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
-        // TODO use `curPeriodDate` value?
+        _setLastPeriod(curPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
 
-        // TODO set curPeriod revenue to remaining revenue of the ending period
-        // TODO Need a separate var to track remaining revenue
         uint256 startingPeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
         uint256 startingPeriodId = curPeriodId + 1;
 
@@ -366,13 +367,31 @@ contract RevenueSplitter is ERC20 {
 
         _afterEndPeriod();
 
-        // Emit new period's details
-        emit StartPeriod(
-            startingPeriodId,
-            startingPeriodDate,
-            endingPeriodRevenue, // TODO set to remaining revenue from ending period
-            endingPeriodTotalSupply
-        );
+        emit StartPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
+    }
+
+    function execute(
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata calldatas
+    ) external {
+        require(msg.sender == owner, "RevenuePool::execute: ONLY_OWNER");
+
+        for (uint256 i = 0; i < targets.length; i++) {
+            (bool success, bytes memory returndata) = targets[i].call{ value: values[i] }(calldatas[i]);
+            if (success) {
+                emit Execute(targets[i], values[i], calldatas[i]);
+            } else if (returndata.length > 0) {
+                // From OZ's Address.sol contract
+                assembly {
+                    let returndata_size := mload(returndata)
+                    revert(add(32, returndata), returndata_size)
+                }
+            } else {
+                // No revert reason given
+                revert("RevenuePool::execute: CALL_REVERTED_WITHOUT_MESSAGE");
+            }
+        }
     }
 
     receive() external payable {
@@ -429,4 +448,6 @@ contract RevenueSplitter is ERC20 {
         uint256 revenuePeriodPool,
         uint256 revenuePeriodTotalSupply
     );
+
+    event Execute(address indexed target, uint256 value, bytes);
 }
