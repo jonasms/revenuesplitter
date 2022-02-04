@@ -25,10 +25,10 @@ const purchaseTokens = async (pool: RevenuePool, accounts: SignerWithAddress[], 
   }
 };
 
-const jumpRevenuePeriods = async (pool: RevenuePool, n: number) => {
+const jumpPeriods = async (pool: RevenuePool, n: number) => {
   for (let i = 0; i < n; i++) {
     await network.provider.send("evm_increaseTime", [REVENUE_PERIOD + ONE_DAY]);
-    await pool.endRevenuePeriod();
+    await pool.endPeriod();
   }
 };
 
@@ -69,7 +69,7 @@ describe("Unit Tests Tests", () => {
 
       it("Should purchase token shares after the first liquidity period", async () => {
         // jump to 2nd liquidity period
-        await jumpRevenuePeriods(pool, 1);
+        await jumpPeriods(pool, 1);
 
         await pool.connect(account1).deposit({ value: TWO_ETH });
 
@@ -103,7 +103,7 @@ describe("Unit Tests Tests", () => {
           value: parseEther("9"),
         });
 
-        await jumpRevenuePeriods(pool, 1);
+        await jumpPeriods(pool, 1);
 
         const balanceBeforeWithdrawl: BigNumber = await account1.getBalance();
 
@@ -123,7 +123,7 @@ describe("Unit Tests Tests", () => {
     describe("withdrawBySig", () => {
       it("Should fail due to INVALID_REVENUE_PERIOD_DATE", async () => {
         const types = {
-          LastRevenuePeriod: [{ name: "date", type: "uint256" }],
+          LastPeriod: [{ name: "date", type: "uint256" }],
         };
         const domain = {
           name: "Web3 Revenue Pool",
@@ -133,46 +133,46 @@ describe("Unit Tests Tests", () => {
 
         const filters = pool.filters.StartPeriod();
         const curPeriod = (await pool.queryFilter(filters))[0];
-        const lastRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
+        const lastPeriodDate = curPeriod.args.revenuePeriodDate;
 
         await purchaseTokens(pool, [account1], TWO_ETH);
 
-        const message = { date: lastRevenuePeriodDate };
+        const message = { date: lastPeriodDate };
         const signature = await account1._signTypedData(domain, types, message);
         const { v, r, s } = ethers.utils.splitSignature(signature);
 
         // Jumping 2 revenue periods will invalidate withdrawl requests from the
-        // `lastRevenuePeriodDate` revenue period because that time stamp no longer the
+        // `lastPeriodDate` revenue period because that time stamp no longer the
         // represents the most recently ended revenue period.
-        await jumpRevenuePeriods(pool, 2);
-        await expect(pool.withdrawBySig(lastRevenuePeriodDate, v, r, s)).to.be.revertedWith(
+        await jumpPeriods(pool, 2);
+        await expect(pool.withdrawBySig(lastPeriodDate, v, r, s)).to.be.revertedWith(
           "RevenueSplitter::withdrawBySig: INVALID_REVENUE_PERIOD_DATE",
         );
       });
     });
 
-    describe.only("withdrawBulk", () => {
+    describe("withdrawBulk", () => {
       const signatures: string[] = [];
 
       it("Should withdraw for several accounts", async () => {
         // Get first "StartPeriod" event
         const filters = pool.filters.StartPeriod();
         const curPeriod = (await pool.queryFilter(filters))[0];
-        const lastRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
+        const lastPeriodDate = curPeriod.args.revenuePeriodDate;
         const _signers = signers.slice(0, 6);
 
         // Last signer is not to be a valid owner of LP tokens
         await purchaseTokens(pool, _signers.slice(0, 5), TWO_ETH);
 
         const types = {
-          LastRevenuePeriod: [{ name: "date", type: "uint256" }],
+          LastPeriod: [{ name: "date", type: "uint256" }],
         };
         const domain = {
           name: "Web3 Revenue Pool",
           chainId: (await provider.getNetwork()).chainId, // get chain id from ethers
           verifyingContract: pool.address, // contract address
         };
-        const message = { date: lastRevenuePeriodDate };
+        const message = { date: lastPeriodDate };
 
         for (let i = 0; i < _signers.length; i++) {
           signatures.push(await _signers[i]._signTypedData(domain, types, message));
@@ -189,7 +189,7 @@ describe("Unit Tests Tests", () => {
         const sList: any[] = [];
 
         signatures.forEach((sig: any) => {
-          periodDateList.push(lastRevenuePeriodDate);
+          periodDateList.push(lastPeriodDate);
           const { v, r, s } = ethers.utils.splitSignature(sig);
           vList.push(v);
           rList.push(r);
@@ -201,7 +201,7 @@ describe("Unit Tests Tests", () => {
           value: parseEther("10"),
         });
 
-        await jumpRevenuePeriods(pool, 1);
+        await jumpPeriods(pool, 1);
 
         await pool.withdrawBulk(periodDateList, vList, rList, sList);
 
@@ -234,7 +234,7 @@ describe("Unit Tests Tests", () => {
 
       it("Should fail if options haven't vested yet", async () => {
         // jump to 2nd liquidity period
-        await jumpRevenuePeriods(pool, 1);
+        await jumpPeriods(pool, 1);
 
         // purchase token options
         await purchaseTokens(pool, signers, TWO_ETH);
@@ -247,14 +247,14 @@ describe("Unit Tests Tests", () => {
       // Should only exercise unexercised vested tokens
       it("Should only exercise unexercised vested tokens", async () => {
         // jump to 2nd liquidity period
-        await jumpRevenuePeriods(pool, 1);
+        await jumpPeriods(pool, 1);
 
         // purchase token options
         await purchaseTokens(pool, signers, TWO_ETH);
 
         // jump to 4th liquidity period
         // where purchased token shares can be exercised
-        await jumpRevenuePeriods(pool, 2);
+        await jumpPeriods(pool, 2);
 
         expect(await pool.balanceOf(account1.address)).to.equal(ZERO_ETH);
         expect(await pool.balanceOfUnexercised(account1.address)).to.equal(TWO_ETH);
@@ -272,11 +272,11 @@ describe("Unit Tests Tests", () => {
       it("Should work with 10 purchase records over time", async () => {
         const n = 10;
         // Unexercised tokens cannot be purchased in the 1st revenue period.
-        await jumpRevenuePeriods(pool, 1);
+        await jumpPeriods(pool, 1);
 
         for (let i = 0; i < n; i++) {
           await purchaseTokens(pool, [account1], TWO_ETH);
-          await jumpRevenuePeriods(pool, 2);
+          await jumpPeriods(pool, 2);
           await pool.connect(account1).redeem();
         }
 
@@ -297,28 +297,28 @@ describe("Unit Tests Tests", () => {
         const signatures: string[] = [];
 
         // Unexercised tokens cannot be purchased in the 1st revenue period.
-        await jumpRevenuePeriods(pool, 1);
+        await jumpPeriods(pool, 1);
 
         // Last signer is not to be a valid owner of Unexercised Tokens
         await purchaseTokens(pool, _signers.slice(0, 5), TWO_ETH);
 
         // jump to 4th liquidity period
         // where purchased token shares can be exercised
-        await jumpRevenuePeriods(pool, 2);
+        await jumpPeriods(pool, 2);
 
         const filters = pool.filters.StartPeriod();
         const curPeriod = (await pool.queryFilter(filters))[3];
-        const curRevenuePeriodDate = curPeriod.args.revenuePeriodDate;
+        const curPeriodDate = curPeriod.args.revenuePeriodDate;
 
         const types = {
-          LastRevenuePeriod: [{ name: "date", type: "uint256" }],
+          LastPeriod: [{ name: "date", type: "uint256" }],
         };
         const domain = {
           name: "Web3 Revenue Pool",
           chainId: (await provider.getNetwork()).chainId, // get chain id from ethers
           verifyingContract: pool.address, // contract address
         };
-        const message = { date: curRevenuePeriodDate };
+        const message = { date: curPeriodDate };
 
         for (let i = 0; i < _signers.length; i++) {
           signatures.push(await _signers[i]._signTypedData(domain, types, message));
@@ -330,7 +330,7 @@ describe("Unit Tests Tests", () => {
         const sList: any[] = [];
 
         signatures.forEach((sig: any) => {
-          periodDateList.push(curRevenuePeriodDate);
+          periodDateList.push(curPeriodDate);
           const { v, r, s } = ethers.utils.splitSignature(sig);
           vList.push(v);
           rList.push(r);

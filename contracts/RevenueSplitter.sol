@@ -13,7 +13,7 @@ contract RevenueSplitter is ERC20 {
         keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
 
     /// @notice The EIP-712 typehash for the revenue period timestamp used by the contract
-    bytes32 private constant REVENUE_PERIOD_DATE_TYPEHASH = keccak256("LastRevenuePeriod(uint256 date)");
+    bytes32 private constant REVENUE_PERIOD_DATE_TYPEHASH = keccak256("LastPeriod(uint256 date)");
 
     // TODO change to 30 days?
     uint256 public constant REVENUE_PERIOD_DURATION = 90 days;
@@ -27,7 +27,7 @@ contract RevenueSplitter is ERC20 {
     address public owner;
     uint256 public maxTokenSupply; // TODO make into constant
 
-    struct RevenuePeriod {
+    struct Period {
         // TODO data packing?
         uint256 date;
         uint256 revenue;
@@ -45,17 +45,17 @@ contract RevenueSplitter is ERC20 {
     mapping(address => RestrictedTokenGrant[]) private _tokenGrants;
     uint256 private _totalSupplyUnexercised;
 
-    uint256 public curRevenuePeriodId;
+    uint256 public curPeriodId;
 
     // TODO convert to arrays?
     // TODO check accessibility
-    uint256 public curRevenuePeriodDate;
-    uint256 private curRevenuePeriodRevenue;
-    uint256 private curRevenuePeriodTotalSupply; // TODO being used?
+    uint256 public curPeriodDate;
+    uint256 private curPeriodRevenue;
+    uint256 private curPeriodTotalSupply; // TODO being used?
 
-    uint256 public lastRevenuePeriodDate;
-    uint256 internal lastRevenuePeriodRevenue;
-    uint256 private lastRevenuePeriodTotalSupply; // TODO being used?
+    uint256 public lastPeriodDate;
+    uint256 internal lastPeriodRevenue;
+    uint256 private lastPeriodTotalSupply; // TODO being used?
 
     // @dev map revenuePeriodId's to user addresses to the amount of ETH they've withdrawn in the given period
     mapping(uint256 => mapping(address => uint256)) private withdrawlReceipts;
@@ -69,17 +69,17 @@ contract RevenueSplitter is ERC20 {
         owner = owner_;
         maxTokenSupply = maxTokenSupply_;
         // TODO set first revenue period end date in separate fxn?
-        uint256 initialRevenuePeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
-        curRevenuePeriodDate = initialRevenuePeriodDate;
+        uint256 initialPeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
+        curPeriodDate = initialPeriodDate;
 
-        emit StartPeriod(0, initialRevenuePeriodDate, 0, 0);
+        emit StartPeriod(0, initialPeriodDate, 0, 0);
     }
 
     // GETTERS
     // TODO delete
-    function getLastRevenuePeriod() external view returns (uint256 revenuePeriodDate, uint256 revenuePeriodRevenue) {
-        revenuePeriodDate = lastRevenuePeriodDate;
-        revenuePeriodRevenue = lastRevenuePeriodRevenue;
+    function getLastPeriod() external view returns (uint256 revenuePeriodDate, uint256 revenuePeriodRevenue) {
+        revenuePeriodDate = lastPeriodDate;
+        revenuePeriodRevenue = lastPeriodRevenue;
     }
 
     // tokenPurchases ?
@@ -113,13 +113,13 @@ contract RevenueSplitter is ERC20 {
         // mint tokens if in first revenue period
         // otherwise, grant restricted tokens
         // TODO make conditional more dynamic?
-        if (lastRevenuePeriodDate == 0) {
+        if (lastPeriodDate == 0) {
             _mint(account_, amount_);
         } else {
-            _createTokenGrant(account_, curRevenuePeriodId + 2, amount_);
+            _createTokenGrant(account_, curPeriodId + 2, amount_);
         }
 
-        // TODO should deposits be added to curRevenuePeriodRevenue?
+        // TODO should deposits be added to curPeriodRevenue?
         // TODO emit event?
     }
 
@@ -128,7 +128,7 @@ contract RevenueSplitter is ERC20 {
     }
 
     function _withdraw(address account_) internal virtual {
-        require(lastRevenuePeriodRevenue > 0, "RevenueSplitter::_withdraw: ZERO_REVENUE");
+        require(lastPeriodRevenue > 0, "RevenueSplitter::_withdraw: ZERO_REVENUE");
 
         uint256 withdrawlPower = _getCurWithdrawlPower(account_);
 
@@ -136,9 +136,9 @@ contract RevenueSplitter is ERC20 {
 
         // TODO will this work w/ miniscule shares?
         uint256 share = (withdrawlPower * 1000) / totalSupply();
-        uint256 ethShare = share * (lastRevenuePeriodRevenue / 1000);
+        uint256 ethShare = share * (lastPeriodRevenue / 1000);
 
-        withdrawlReceipts[curRevenuePeriodId - 1][account_] += withdrawlPower;
+        withdrawlReceipts[curPeriodId - 1][account_] += withdrawlPower;
         (bool success, ) = account_.call{ value: ethShare }("");
         require(success, "RevenueSplitter::_withdrawRevenueShare: REQUEST_FAILED");
         // TODO handle bytes error message
@@ -155,10 +155,7 @@ contract RevenueSplitter is ERC20 {
         bytes32 r_,
         bytes32 s_
     ) external {
-        require(
-            revenuePeriodDate_ == lastRevenuePeriodDate,
-            "RevenueSplitter::withdrawBySig: INVALID_REVENUE_PERIOD_DATE"
-        );
+        require(revenuePeriodDate_ == lastPeriodDate, "RevenueSplitter::withdrawBySig: INVALID_REVENUE_PERIOD_DATE");
 
         bytes32 domainSeparator = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
@@ -202,7 +199,7 @@ contract RevenueSplitter is ERC20 {
 
         uint256 exercisedTokensCount;
         for (uint256 i = 0; i < tokenGrants.length; i++) {
-            if (tokenGrants[i].vestingPeriod <= curRevenuePeriodId && !tokenGrants[i].exercised) {
+            if (tokenGrants[i].vestingPeriod <= curPeriodId && !tokenGrants[i].exercised) {
                 tokenGrants[i].exercised = true;
                 exercisedTokensCount += tokenGrants[i].amount;
             }
@@ -213,7 +210,7 @@ contract RevenueSplitter is ERC20 {
         _totalSupplyUnexercised -= exercisedTokensCount;
         _mint(account_, exercisedTokensCount);
 
-        emit Redeem(account_, curRevenuePeriodId, exercisedTokensCount);
+        emit Redeem(account_, curPeriodId, exercisedTokensCount);
     }
 
     function redeem() external virtual {
@@ -226,10 +223,7 @@ contract RevenueSplitter is ERC20 {
         bytes32 r_,
         bytes32 s_
     ) external {
-        require(
-            revenuePeriodDate_ == curRevenuePeriodDate,
-            "RevenueSplitter::redeemBySig: INVALID_REVENUE_PERIOD_DATE"
-        );
+        require(revenuePeriodDate_ == curPeriodDate, "RevenueSplitter::redeemBySig: INVALID_REVENUE_PERIOD_DATE");
 
         bytes32 domainSeparator = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
@@ -279,7 +273,7 @@ contract RevenueSplitter is ERC20 {
     }
 
     function _getCurWithdrawlPower(address account_) internal view returns (uint256 amount) {
-        amount = balanceOf(account_) - withdrawlReceipts[curRevenuePeriodId - 1][account_];
+        amount = balanceOf(account_) - withdrawlReceipts[curPeriodId - 1][account_];
     }
 
     function getCurWithdrawlPower() external view returns (uint256) {
@@ -303,7 +297,7 @@ contract RevenueSplitter is ERC20 {
         //  user transfers more than amt tokens just reedemed (transferring tokens withdrawn in the current period)
         //  to_ user should only be able to withdraw up to the amt of tokens just reedemed
 
-        withdrawlReceipts[curRevenuePeriodId - 1][to_] += withdrawlReceiptTransfer;
+        withdrawlReceipts[curPeriodId - 1][to_] += withdrawlReceiptTransfer;
         // TODO reduce from_'s withdrawn amount
 
         super._transfer(from_, to_, amount_);
@@ -318,7 +312,7 @@ contract RevenueSplitter is ERC20 {
     // ) internal virtual override {
     //     // TODO do this elsewhere
     //     if (id_ == TOKEN_OPTION) {
-    //         _createTokenGrant(to_, curRevenuePeriodId + 2, amount_);
+    //         _createTokenGrant(to_, curPeriodId + 2, amount_);
     //     }
 
     //     _totalSupply[id_] += amount_;
@@ -326,67 +320,64 @@ contract RevenueSplitter is ERC20 {
     //     super._mint(to_, id_, amount_, data_);
     // }
 
-    function _setCurRevenuePeriod(
+    function _setCurPeriod(
         uint256 date_,
         uint256 revenue_,
         uint256 totalSupply_
     ) internal {
-        curRevenuePeriodDate = date_;
-        curRevenuePeriodRevenue = revenue_;
-        curRevenuePeriodTotalSupply = totalSupply_;
+        curPeriodDate = date_;
+        curPeriodRevenue = revenue_;
+        curPeriodTotalSupply = totalSupply_;
     }
 
-    function _setLastRevenuePeriod(
+    function _setLastPeriod(
         uint256 date_,
         uint256 revenue_,
         uint256 totalSupply_
     ) internal {
-        lastRevenuePeriodDate = date_;
-        lastRevenuePeriodRevenue = revenue_;
-        lastRevenuePeriodTotalSupply = totalSupply_;
+        lastPeriodDate = date_;
+        lastPeriodRevenue = revenue_;
+        lastPeriodTotalSupply = totalSupply_;
     }
 
     /**
         TESTING
             1. Fxn reverts if the current period is currently in progress
-            2. Fxn sets `lastRevenuePeriod` and creates a new `curRevenuePeriod`
+            2. Fxn sets `lastPeriod` and creates a new `curPeriod`
      */
-    function endRevenuePeriod() public {
-        require(
-            block.timestamp >= curRevenuePeriodDate,
-            "RevenueSplitter::endRevenuePeriod: REVENUE_PERIOD_IN_PROGRESS"
-        );
+    function endPeriod() public {
+        require(block.timestamp >= curPeriodDate, "RevenueSplitter::endPeriod: REVENUE_PERIOD_IN_PROGRESS");
 
-        _beforeEndRevenuePeriod();
+        _beforeEndPeriod();
 
-        uint256 endingRevenuePeriodDate = curRevenuePeriodDate;
-        uint256 endingRevenuePeriodRevenue = curRevenuePeriodRevenue;
-        uint256 endingRevenuePeriodTotalSupply = curRevenuePeriodTotalSupply;
-        _setLastRevenuePeriod(endingRevenuePeriodDate, endingRevenuePeriodRevenue, endingRevenuePeriodTotalSupply);
-        // TODO use `curRevenuePeriodDate` value?
+        uint256 endingPeriodDate = curPeriodDate;
+        uint256 endingPeriodRevenue = curPeriodRevenue;
+        uint256 endingPeriodTotalSupply = curPeriodTotalSupply;
+        _setLastPeriod(endingPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
+        // TODO use `curPeriodDate` value?
 
         // TODO set curPeriod revenue to remaining revenue of the ending period
         // TODO Need a separate var to track remaining revenue
-        uint256 nextRevenuePeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
-        uint256 nextRevenuePeriodId = curRevenuePeriodId + 1;
+        uint256 startingPeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
+        uint256 startingPeriodId = curPeriodId + 1;
 
-        _setCurRevenuePeriod(nextRevenuePeriodDate, endingRevenuePeriodRevenue, endingRevenuePeriodTotalSupply);
-        curRevenuePeriodId = nextRevenuePeriodId;
+        _setCurPeriod(startingPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
+        curPeriodId = startingPeriodId;
 
-        _afterEndRevenuePeriod();
+        _afterEndPeriod();
 
         // Emit new period's details
         emit StartPeriod(
-            nextRevenuePeriodId,
-            nextRevenuePeriodDate,
-            endingRevenuePeriodRevenue, // TODO set to remaining revenue from ending period
-            endingRevenuePeriodTotalSupply
+            startingPeriodId,
+            startingPeriodDate,
+            endingPeriodRevenue, // TODO set to remaining revenue from ending period
+            endingPeriodTotalSupply
         );
     }
 
     receive() external payable {
         _onReceive();
-        curRevenuePeriodRevenue += msg.value;
+        curPeriodRevenue += msg.value;
         emit PaymentReceived(msg.sender, msg.value);
     }
 
@@ -413,9 +404,9 @@ contract RevenueSplitter is ERC20 {
 
     function _afterTokenUnexercisedTransfer() internal virtual {}
 
-    function _beforeEndRevenuePeriod() internal virtual {}
+    function _beforeEndPeriod() internal virtual {}
 
-    function _afterEndRevenuePeriod() internal virtual {}
+    function _afterEndPeriod() internal virtual {}
 
     // function _beforeExecute(bytes calldata data_) internal virtual {
     //     console.log("PLACEHOLDER");
@@ -431,7 +422,7 @@ contract RevenueSplitter is ERC20 {
 
     event Redeem(address, uint256, uint256);
 
-    // TODO necessary to index `endingRevenuePeriodDate`? Check gas cost of indexing.
+    // TODO necessary to index `endingPeriodDate`? Check gas cost of indexing.
     event StartPeriod(
         uint256 indexed revenuePeriodId,
         uint256 indexed revenuePeriodDate,

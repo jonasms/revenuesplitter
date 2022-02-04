@@ -78,7 +78,7 @@ contract RevenuePool is RevenueSplitter {
     // _onReceive()
     //  - IF in first 2/3rds of period, invest capital
 
-    // _beforeEndRevenuePeriod()
+    // _beforeEndPeriod()
     //  - liquidate investments
 
     // liquidate()
