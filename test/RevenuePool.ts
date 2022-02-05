@@ -43,11 +43,11 @@ const jumpPeriods = async (pool: RevenuePool, n: number, skipBlackout?: boolean)
 describe("Unit Tests Tests", () => {
   let pool: RevenuePool;
   let signers: SignerWithAddress[];
-  let [admin, account1, account2]: SignerWithAddress[] = [];
+  let [admin, account1, account2, account3]: SignerWithAddress[] = [];
 
   before(async function () {
     signers = await ethers.getSigners();
-    [admin, account1, account2] = signers;
+    [admin, account1, account2, account3] = signers;
     signers = signers.slice(1);
   });
 
@@ -99,33 +99,70 @@ describe("Unit Tests Tests", () => {
       });
     });
 
-    describe("withdraw", () => {
+    describe.only("withdraw", () => {
+      let balanceBeforeWithdrawl: BigNumber;
       beforeEach(async () => {
         // TODO reduce signer count from 10 to 5
-        await purchaseTokens(pool, signers.slice(0, 10), TWO_ETH);
-      });
-      //  - can withdraw correct amount
-      it("Should withdraw the correct amount", async () => {
+        await purchaseTokens(pool, signers.slice(0, 5), TWO_ETH);
         await admin.sendTransaction({
           to: pool.address,
-          value: parseEther("9"),
+          value: parseEther("5"),
         });
 
         await jumpPeriods(pool, 1, true);
 
-        const balanceBeforeWithdrawl: BigNumber = await account1.getBalance();
-
+        balanceBeforeWithdrawl = await account1.getBalance();
+      });
+      //  - can withdraw correct amount
+      it("Should withdraw the correct amount", async () => {
         await pool.connect(account1).withdraw();
 
         const balanceAfterWithdrawl: BigNumber = await account1.getBalance();
 
         const amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
 
-        // Should be 0.9 ETH less gas fees for executing withdraw()
-        expect(amountWithdrawn).gte(parseEther("0.899"));
+        // Should be 1 ETH less gas fees
+        expect(amountWithdrawn).gte(parseEther("0.999"));
+        expect(amountWithdrawn).lt(parseEther("1"));
       });
-      //  - cannot withdraw, transfer tokens, withraw again using same tokens
-      // it("Should prevent tokens being used to withdraw more than once in a given period", () => {});
+
+      it("Withdrawing tokens more than once in a given period should result in a 'ZERO_WITHDRAWL_POWER' error", async () => {
+        await pool.connect(account1).withdraw();
+        await expect(pool.connect(account1).withdraw()).to.be.revertedWith(
+          "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER",
+        );
+      });
+
+      it("Should prevent tokens being used to withdraw after being withdrawn and then transfered", async () => {
+        await pool.connect(account1).withdraw();
+        // Transfer token withdrawn this period
+        await pool.connect(account1).transfer(account2.address, ONE_ETH);
+
+        balanceBeforeWithdrawl = await account2.getBalance();
+        await pool.connect(account2).withdraw();
+
+        let balanceAfterWithdrawl: BigNumber = await account2.getBalance();
+        let amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
+
+        expect(amountWithdrawn).gte(parseEther("0.999"));
+        expect(amountWithdrawn).lt(parseEther("1"));
+
+        // Transfer token not yet withdrawn this period
+        await pool.connect(account3).transfer(account2.address, TWO_ETH);
+
+        await pool.connect(account2).withdraw();
+        balanceAfterWithdrawl = await account2.getBalance();
+        amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
+
+        expect(amountWithdrawn).gte(parseEther("1.999"));
+        expect(amountWithdrawn).lt(parseEther("2.0"));
+
+        // account3 is expected to not be able to withdraw any revenue share
+        // because they transfered all of their shares
+        await expect(pool.connect(account3).withdraw()).to.be.revertedWith(
+          "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER",
+        );
+      });
     });
 
     describe("withdrawBySig", () => {

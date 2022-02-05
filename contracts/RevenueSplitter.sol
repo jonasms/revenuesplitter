@@ -15,30 +15,15 @@ contract RevenueSplitter is ERC20 {
     /// @notice The EIP-712 typehash for the revenue period timestamp used by the contract
     bytes32 private constant REVENUE_PERIOD_DATE_TYPEHASH = keccak256("LastPeriod(uint256 date)");
 
-    // TODO change to 30 days?
     uint256 public constant REVENUE_PERIOD_DURATION = 30 days;
     uint256 public constant BLACKOUT_PERIOD_DURATION = 3 days;
 
-    /**
-        Used to give users a period of time to vest unvested tokens
-        before withdrawls from the revenue pool are made.
-     */
-    // uint256 private constant BLACKOUT_PERIOD = 7 days;
-
     address public owner;
-    uint256 public maxTokenSupply; // TODO make into constant
-
-    struct Period {
-        // TODO data packing?
-        uint256 date;
-        uint256 revenue;
-        uint256 totalSupplyUnvested; // TODO being used?
-        mapping(address => uint256) balanceOfUnvested; // TODO being used?
-    }
+    uint256 public maxTokenSupply;
 
     struct RestrictedTokenGrant {
         // TODO data packing?
-        uint256 vestingPeriod; // TODO change to `vestingDate`?
+        uint256 vestingDate;
         uint256 amount;
         bool exercised;
     }
@@ -74,19 +59,6 @@ contract RevenueSplitter is ERC20 {
         curPeriodDate = initialPeriodDate;
 
         emit StartPeriod(0, initialPeriodDate, 0, 0);
-    }
-
-    // GETTERS
-    // TODO delete
-    function getLastPeriod() external view returns (uint256 revenuePeriodDate, uint256 revenuePeriodRevenue) {
-        revenuePeriodDate = lastPeriodDate;
-        revenuePeriodRevenue = lastPeriodRevenue;
-    }
-
-    // tokenPurchases ?
-    // TODO test if can override this to make it 'internal'. Otherwise, I'm unsure of the purpose of this.
-    function totalSupplyUnexercised() public view virtual returns (uint256) {
-        return _totalSupplyUnexercised;
     }
 
     function balanceOfUnexercised(address account_) public view virtual returns (uint256 balanceUnexercised) {
@@ -137,7 +109,7 @@ contract RevenueSplitter is ERC20 {
         require(!_isBlackoutPeriod(), "RevenueSplitter::_withdraw: BLACKOUT_PERIOD");
         require(lastPeriodRevenue > 0, "RevenueSplitter::_withdraw: ZERO_REVENUE");
 
-        uint256 withdrawlPower = _getCurWithdrawlPower(account_);
+        uint256 withdrawlPower = _getWithdrawlPower(account_);
 
         require(withdrawlPower > 0, "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER");
 
@@ -206,7 +178,7 @@ contract RevenueSplitter is ERC20 {
 
         uint256 exercisedTokensCount;
         for (uint256 i = 0; i < tokenGrants.length; i++) {
-            if (tokenGrants[i].vestingPeriod <= curPeriodId && !tokenGrants[i].exercised) {
+            if (tokenGrants[i].vestingDate <= curPeriodId && !tokenGrants[i].exercised) {
                 tokenGrants[i].exercised = true;
                 exercisedTokensCount += tokenGrants[i].amount;
             }
@@ -270,21 +242,21 @@ contract RevenueSplitter is ERC20 {
     // TODO rename
     function _createTokenGrant(
         address addr_,
-        uint256 vestingPeriod_,
+        uint256 vestingDate_,
         uint256 amount_
     ) internal {
         _totalSupplyUnexercised += amount_;
-        _tokenGrants[addr_].push(RestrictedTokenGrant(vestingPeriod_, amount_, false));
+        _tokenGrants[addr_].push(RestrictedTokenGrant(vestingDate_, amount_, false));
 
         // TODO emit event
     }
 
-    function _getCurWithdrawlPower(address account_) internal view returns (uint256 amount) {
+    function _getWithdrawlPower(address account_) internal view returns (uint256 amount) {
         amount = balanceOf(account_) - withdrawlReceipts[curPeriodId - 1][account_];
     }
 
     function getCurWithdrawlPower() external view returns (uint256) {
-        return _getCurWithdrawlPower(msg.sender);
+        return _getWithdrawlPower(msg.sender);
     }
 
     // prevent tokens being used for a withdrawl more than once per revenue period
@@ -294,9 +266,10 @@ contract RevenueSplitter is ERC20 {
         address from_,
         uint256 amount_
     ) internal virtual override {
-        uint256 fromWithdrawlPower = _getCurWithdrawlPower(from_);
+        uint256 fromWithdrawnReceipts = withdrawlReceipts[curPeriodId - 1][from_];
 
-        uint256 withdrawlReceiptTransfer = amount_ >= fromWithdrawlPower ? amount_ - fromWithdrawlPower : amount_;
+        // 0 < withdrawlReceiptTransfer < amount_
+        uint256 withdrawlReceiptTransfer = fromWithdrawnReceipts >= amount_ ? amount_ : fromWithdrawnReceipts;
 
         // TODO test scenario
         //  user withdrawls
@@ -306,26 +279,16 @@ contract RevenueSplitter is ERC20 {
 
         withdrawlReceipts[curPeriodId - 1][to_] += withdrawlReceiptTransfer;
         // TODO reduce from_'s withdrawn amount
+        withdrawlReceipts[curPeriodId - 1][from_] -= withdrawlReceiptTransfer;
 
         super._transfer(from_, to_, amount_);
     }
 
-    // TODO remove?
-    // function _mint(
-    //     address to_,
-    //     uint256 id_,
-    //     uint256 amount_,
-    //     bytes memory data_
-    // ) internal virtual override {
-    //     // TODO do this elsewhere
-    //     if (id_ == TOKEN_OPTION) {
-    //         _createTokenGrant(to_, curPeriodId + 2, amount_);
-    //     }
+    function _mint(address account_, uint256 amount_) internal virtual override {
+        curPeriodTotalSupply += amount_;
 
-    //     _totalSupply[id_] += amount_;
-
-    //     super._mint(to_, id_, amount_, data_);
-    // }
+        super._mint(account_, amount_);
+    }
 
     function _setCurPeriod(
         uint256 date_,
@@ -429,11 +392,9 @@ contract RevenueSplitter is ERC20 {
     function _afterEndPeriod() internal virtual {}
 
     // function _beforeExecute(bytes calldata data_) internal virtual {
-    //     console.log("PLACEHOLDER");
     // }
 
     // function _afterExecute(bytes calldata data_) internal virtual {
-    //     console.log("PLACEHOLDER");
     // }
 
     function _onReceive() internal virtual {}
