@@ -106,14 +106,22 @@ contract RevenueSplitter is ERC20 {
 
         require(withdrawlPower > 0, "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER");
 
-        // TODO will this work w/ miniscule shares?
         uint256 share = (withdrawlPower * 10**8) / totalSupply();
         uint256 ethShare = share * (lastPeriodRevenue / 10**8);
 
         withdrawlReceipts[curPeriodId - 1][account_] += withdrawlPower;
-        (bool success, ) = account_.call{ value: ethShare }("");
-        require(success, "RevenueSplitter::_withdrawRevenueShare: REQUEST_FAILED");
-        // TODO handle bytes error message
+        (bool success, bytes memory responseData) = account_.call{ value: ethShare }("");
+        if (success) {
+            emit Execute(targets[i], values[i], calldatas[i]);
+        } else if (returnData.length > 0) {
+            // From OZ's Address.sol contract
+            assembly {
+                let returndata_size := mload(returnData)
+                revert(add(32, returnData), returndata_size)
+            }
+        } else {
+            revert("RevenuePool::_withdraw: CALL_REVERTED_WITHOUT_MESSAGE");
+        }
 
         emit Withdraw(account_, withdrawlPower);
     }
@@ -313,17 +321,16 @@ contract RevenueSplitter is ERC20 {
         require(msg.sender == owner, "RevenuePool::execute: ONLY_OWNER");
 
         for (uint256 i = 0; i < targets.length; i++) {
-            (bool success, bytes memory returndata) = targets[i].call{ value: values[i] }(calldatas[i]);
+            (bool success, bytes memory returnData) = targets[i].call{ value: values[i] }(calldatas[i]);
             if (success) {
                 emit Execute(targets[i], values[i], calldatas[i]);
-            } else if (returndata.length > 0) {
+            } else if (returnData.length > 0) {
                 // From OZ's Address.sol contract
                 assembly {
-                    let returndata_size := mload(returndata)
-                    revert(add(32, returndata), returndata_size)
+                    let returndata_size := mload(returnData)
+                    revert(add(32, returnData), returndata_size)
                 }
             } else {
-                // No revert reason given
                 revert("RevenuePool::execute: CALL_REVERTED_WITHOUT_MESSAGE");
             }
         }
