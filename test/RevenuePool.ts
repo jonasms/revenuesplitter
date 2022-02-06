@@ -45,6 +45,12 @@ describe("Unit Tests Tests", () => {
   let signers: SignerWithAddress[];
   let [admin, account1, account2, account3]: SignerWithAddress[] = [];
 
+  const redeemTokens = async (accounts: SignerWithAddress[]) => {
+    for (let i = 0; i < accounts.length; i++) {
+      await pool.connect(accounts[i]).redeem();
+    }
+  };
+
   before(async function () {
     signers = await ethers.getSigners();
     [admin, account1, account2, account3] = signers;
@@ -57,7 +63,7 @@ describe("Unit Tests Tests", () => {
       pool = <RevenuePool>(
         await waffle.deployContract(admin, revenuePoolArtifact, [
           admin.address,
-          parseEther("100"),
+          parseEther("10000"),
           1,
           "Web3 Revenue Pool",
           "WRP",
@@ -113,7 +119,6 @@ describe("Unit Tests Tests", () => {
 
         balanceBeforeWithdrawl = await account1.getBalance();
       });
-      //  - can withdraw correct amount
       it("Should withdraw the correct amount", async () => {
         await pool.connect(account1).withdraw();
 
@@ -124,6 +129,31 @@ describe("Unit Tests Tests", () => {
         // Should be 1 ETH less gas fees
         expect(amountWithdrawn).gte(parseEther("0.999"));
         expect(amountWithdrawn).lt(parseEther("1"));
+      });
+
+      it("Should withdraw the correct amount for fractions of a token", async () => {
+        const whales = signers.slice(5, 15);
+        // Total sum of 1,010 tokens (shares)
+        await purchaseTokens(pool, whales, parseEther("100"));
+        await jumpPeriods(pool, 1, true);
+        await admin.sendTransaction({
+          to: pool.address,
+          value: parseEther("100"),
+        });
+        await jumpPeriods(pool, 1, true);
+        await redeemTokens(whales);
+
+        balanceBeforeWithdrawl = await account1.getBalance();
+
+        await pool.connect(account1).withdraw();
+
+        const balanceAfterWithdrawl: BigNumber = await account1.getBalance();
+
+        const amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
+
+        // Should be 1 ETH less gas fees
+        expect(amountWithdrawn).gte(parseEther("0.2"));
+        expect(amountWithdrawn).lt(parseEther("0.2079"));
       });
 
       it("Withdrawing tokens more than once in a given period should result in a 'ZERO_WITHDRAWL_POWER' error", async () => {
@@ -176,9 +206,9 @@ describe("Unit Tests Tests", () => {
           verifyingContract: pool.address, // contract address
         };
 
-        const filters = pool.filters.StartPeriod();
+        const filters = pool.filters.StartNewPeriod();
         const curPeriod = (await pool.queryFilter(filters))[0];
-        const lastPeriodDate = curPeriod.args.revenuePeriodDate;
+        const lastPeriodDate = curPeriod.args.periodEndDate;
 
         await purchaseTokens(pool, [account1], TWO_ETH);
 
@@ -200,10 +230,10 @@ describe("Unit Tests Tests", () => {
       const signatures: string[] = [];
 
       it("Should withdraw for several accounts", async () => {
-        // Get first "StartPeriod" event
-        const filters = pool.filters.StartPeriod();
+        // Get first "StartNewPeriod" event
+        const filters = pool.filters.StartNewPeriod();
         const curPeriod = (await pool.queryFilter(filters))[0];
-        const lastPeriodDate = curPeriod.args.revenuePeriodDate;
+        const lastPeriodDate = curPeriod.args.periodEndDate;
         const _signers = signers.slice(0, 6);
 
         // Last signer is not to be a valid owner of LP tokens
@@ -351,9 +381,9 @@ describe("Unit Tests Tests", () => {
         // where purchased token shares can be exercised
         await jumpPeriods(pool, 1);
 
-        const filters = pool.filters.StartPeriod();
+        const filters = pool.filters.StartNewPeriod();
         const curPeriod = (await pool.queryFilter(filters))[2];
-        const curPeriodDate = curPeriod.args.revenuePeriodDate;
+        const curPeriodDate = curPeriod.args.periodEndDate;
 
         await jumpPeriods(pool, 1);
 

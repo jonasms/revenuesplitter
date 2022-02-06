@@ -22,7 +22,6 @@ contract RevenueSplitter is ERC20 {
     uint256 public maxTokenSupply;
 
     struct RestrictedTokenGrant {
-        // TODO data packing?
         uint256 vestingDate;
         uint256 amount;
         bool exercised;
@@ -33,15 +32,12 @@ contract RevenueSplitter is ERC20 {
 
     uint256 public curPeriodId;
 
-    // TODO convert to arrays?
-    // TODO check accessibility
-    uint256 public curPeriodDate;
+    uint256 private curPeriodDate;
     uint256 private curPeriodRevenue;
-    uint256 private curPeriodTotalSupply; // TODO being used?
 
-    uint256 public lastPeriodDate;
-    uint256 internal lastPeriodRevenue;
-    uint256 private lastPeriodTotalSupply; // TODO being used?
+    uint256 private lastPeriodDate;
+    uint256 private lastPeriodRevenue;
+    uint256 private lastPeriodTotalSupply;
 
     // @dev map revenuePeriodId's to user addresses to the amount of ETH they've withdrawn in the given period
     mapping(uint256 => mapping(address => uint256)) private withdrawlReceipts;
@@ -54,11 +50,10 @@ contract RevenueSplitter is ERC20 {
     ) ERC20(name_, symbol_) {
         owner = owner_;
         maxTokenSupply = maxTokenSupply_;
-        // TODO set first revenue period end date in separate fxn?
         uint256 initialPeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
         curPeriodDate = initialPeriodDate;
 
-        emit StartPeriod(0, initialPeriodDate, 0, 0);
+        emit StartNewPeriod(0, initialPeriodDate, 0, 0);
     }
 
     function balanceOfUnexercised(address account_) public view virtual returns (uint256 balanceUnexercised) {
@@ -112,8 +107,8 @@ contract RevenueSplitter is ERC20 {
         require(withdrawlPower > 0, "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER");
 
         // TODO will this work w/ miniscule shares?
-        uint256 share = (withdrawlPower * 1000) / totalSupply();
-        uint256 ethShare = share * (lastPeriodRevenue / 1000);
+        uint256 share = (withdrawlPower * 10**8) / totalSupply();
+        uint256 ethShare = share * (lastPeriodRevenue / 10**8);
 
         withdrawlReceipts[curPeriodId - 1][account_] += withdrawlPower;
         (bool success, ) = account_.call{ value: ethShare }("");
@@ -136,7 +131,7 @@ contract RevenueSplitter is ERC20 {
         require(revenuePeriodDate_ == lastPeriodDate, "RevenueSplitter::withdrawBySig: INVALID_REVENUE_PERIOD_DATE");
 
         bytes32 domainSeparator = keccak256(
-            abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
+            abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), _getChainId(), address(this))
         );
         bytes32 structHash = keccak256(abi.encode(REVENUE_PERIOD_DATE_TYPEHASH, revenuePeriodDate_));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
@@ -204,7 +199,7 @@ contract RevenueSplitter is ERC20 {
         require(revenuePeriodDate_ == lastPeriodDate, "RevenueSplitter::redeemBySig: INVALID_REVENUE_PERIOD_DATE");
 
         bytes32 domainSeparator = keccak256(
-            abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
+            abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), _getChainId(), address(this))
         );
         bytes32 structHash = keccak256(abi.encode(REVENUE_PERIOD_DATE_TYPEHASH, revenuePeriodDate_));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
@@ -253,10 +248,6 @@ contract RevenueSplitter is ERC20 {
         amount = balanceOf(account_) - withdrawlReceipts[curPeriodId - 1][account_];
     }
 
-    function getCurWithdrawlPower() external view returns (uint256) {
-        return _getWithdrawlPower(msg.sender);
-    }
-
     // Prevent tokens from being used for a withdrawl more than once per revenue period
     // Allows transfer of tokens that have been used to withdraw funds in the current period
     function _transfer(
@@ -275,20 +266,9 @@ contract RevenueSplitter is ERC20 {
         super._transfer(from_, to_, amount_);
     }
 
-    function _mint(address account_, uint256 amount_) internal virtual override {
-        curPeriodTotalSupply += amount_;
-
-        super._mint(account_, amount_);
-    }
-
-    function _setCurPeriod(
-        uint256 date_,
-        uint256 revenue_,
-        uint256 totalSupply_
-    ) internal {
+    function _setCurPeriod(uint256 date_, uint256 revenue_) internal {
         curPeriodDate = date_;
         curPeriodRevenue = revenue_;
-        curPeriodTotalSupply = totalSupply_;
     }
 
     function _setLastPeriod(
@@ -301,7 +281,7 @@ contract RevenueSplitter is ERC20 {
         lastPeriodTotalSupply = totalSupply_;
     }
 
-    function endPeriod() public {
+    function endPeriod() external {
         require(block.timestamp >= curPeriodDate, "RevenueSplitter::endPeriod: REVENUE_PERIOD_IN_PROGRESS");
 
         _beforeEndPeriod();
@@ -311,13 +291,13 @@ contract RevenueSplitter is ERC20 {
         uint256 endingPeriodRevenue = curPeriodRevenue > address(this).balance
             ? address(this).balance
             : curPeriodRevenue;
-        uint256 endingPeriodTotalSupply = curPeriodTotalSupply;
+        uint256 endingPeriodTotalSupply = totalSupply();
         _setLastPeriod(curPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
 
         uint256 startingPeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
         uint256 startingPeriodId = curPeriodId + 1;
 
-        _setCurPeriod(startingPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
+        _setCurPeriod(startingPeriodDate, endingPeriodRevenue);
         curPeriodId = startingPeriodId;
 
         _afterEndPeriod();
@@ -364,7 +344,7 @@ contract RevenueSplitter is ERC20 {
     }
 
     /* UTILS */
-    function getChainId() internal view returns (uint256) {
+    function _getChainId() internal view returns (uint256) {
         uint256 chainId;
         assembly {
             chainId := chainid()
@@ -395,7 +375,7 @@ contract RevenueSplitter is ERC20 {
 
     event StartNewPeriod(
         uint256 indexed periodId,
-        uint256 periodDate,
+        uint256 periodEndDate,
         uint256 periodRevenue,
         uint256 periodTotalSupply
     );
