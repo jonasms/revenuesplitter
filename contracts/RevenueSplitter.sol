@@ -18,14 +18,14 @@ contract RevenueSplitter is ERC20 {
     uint256 public constant REVENUE_PERIOD_DURATION = 30 days;
     uint256 public constant BLACKOUT_PERIOD_DURATION = 3 days;
 
-    address public owner;
-    uint256 public maxTokenSupply;
-
     struct RestrictedTokenGrant {
         uint256 vestingDate;
         uint256 amount;
         bool exercised;
     }
+
+    address public owner;
+    uint256 public maxTokenSupply;
 
     mapping(address => RestrictedTokenGrant[]) private _tokenGrants;
     uint256 private _totalSupplyUnexercised;
@@ -37,9 +37,8 @@ contract RevenueSplitter is ERC20 {
 
     uint256 private lastPeriodDate;
     uint256 private lastPeriodRevenue;
-    uint256 private lastPeriodTotalSupply;
 
-    // @dev map revenuePeriodId's to user addresses to the amount of ETH they've withdrawn in the given period
+    // @dev maps revenuePeriodId's to user addresses to the amount of ETH they've withdrawn in the given period
     mapping(uint256 => mapping(address => uint256)) private withdrawlReceipts;
 
     constructor(
@@ -53,7 +52,7 @@ contract RevenueSplitter is ERC20 {
         uint256 initialPeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
         curPeriodDate = initialPeriodDate;
 
-        emit StartNewPeriod(0, initialPeriodDate, 0, 0);
+        emit StartNewPeriod(0, initialPeriodDate, 0);
     }
 
     function balanceOfUnexercised(address account_) public view virtual returns (uint256 balanceUnexercised) {
@@ -70,6 +69,23 @@ contract RevenueSplitter is ERC20 {
         return BLACKOUT_PERIOD_DURATION >= block.timestamp - curPeriodStartTime;
     }
 
+    function _mintRestricted(
+        address account_,
+        uint256 amount_,
+        uint256 vestingDate_
+    ) internal {
+        require(account_ != address(0), "RevenueSplitter::_mintRestricted: MINT_TO_ZERO_ADDRESS");
+
+        _beforeTokenGrantTransfer(address(0), account_, amount_, vestingDate_);
+
+        _totalSupplyUnexercised += amount_;
+        _tokenGrants[account_].push(RestrictedTokenGrant(vestingDate_, amount_, false));
+
+        emit MintRestricted(account_, amount_);
+
+        _afterTokenGrantTransfer(address(0), account_, amount_, vestingDate_);
+    }
+
     // _deposit(address account_, uint amount_) internal virtual
     //  - require deposit amount less than max supply
     //  - calculates amount to mint
@@ -83,7 +99,7 @@ contract RevenueSplitter is ERC20 {
             "RevenueSplitter::_deposit: MAX_TOKEN_LIMIT"
         );
 
-        // mint tokens if in first revenue period
+        // mint tokens if in first period
         // otherwise, grant restricted tokens
         if (lastPeriodDate == 0) {
             _mint(account_, amount_);
@@ -98,6 +114,10 @@ contract RevenueSplitter is ERC20 {
         _deposit(msg.sender, msg.value);
     }
 
+    function _getWithdrawlPower(address account_) internal view returns (uint256 amount) {
+        amount = balanceOf(account_) - withdrawlReceipts[curPeriodId - 1][account_];
+    }
+
     function _withdraw(address account_) internal virtual {
         require(!_isBlackoutPeriod(), "RevenueSplitter::_withdraw: BLACKOUT_PERIOD");
         require(lastPeriodRevenue > 0, "RevenueSplitter::_withdraw: ZERO_REVENUE");
@@ -110,9 +130,9 @@ contract RevenueSplitter is ERC20 {
         uint256 ethShare = share * (lastPeriodRevenue / 10**8);
 
         withdrawlReceipts[curPeriodId - 1][account_] += withdrawlPower;
-        (bool success, bytes memory responseData) = account_.call{ value: ethShare }("");
+        (bool success, bytes memory returnData) = account_.call{ value: ethShare }("");
         if (success) {
-            emit Execute(targets[i], values[i], calldatas[i]);
+            emit Withdraw(account_, ethShare);
         } else if (returnData.length > 0) {
             // From OZ's Address.sol contract
             assembly {
@@ -122,8 +142,6 @@ contract RevenueSplitter is ERC20 {
         } else {
             revert("RevenuePool::_withdraw: CALL_REVERTED_WITHOUT_MESSAGE");
         }
-
-        emit Withdraw(account_, withdrawlPower);
     }
 
     function withdraw() external virtual {
@@ -176,7 +194,7 @@ contract RevenueSplitter is ERC20 {
     function _redeem(address account_) internal virtual {
         RestrictedTokenGrant[] storage tokenGrants = _tokenGrants[account_];
 
-        require(tokenGrants.length > 0, "RevenueSplitter::redeem: ZERO_TOKEN_PURCHASES");
+        require(tokenGrants.length > 0, "RevenueSplitter::redeem: ZERO_TOKEN_GRANTS");
 
         uint256 exercisedTokensCount;
         for (uint256 i = 0; i < tokenGrants.length; i++) {
@@ -241,76 +259,38 @@ contract RevenueSplitter is ERC20 {
         }
     }
 
-    function _mintRestricted(
-        address account_,
-        uint256 amount_,
-        uint256 vestingDate_
-    ) internal {
-        _totalSupplyUnexercised += amount_;
-        _tokenGrants[account_].push(RestrictedTokenGrant(vestingDate_, amount_, false));
-
-        emit MintRestricted(account_, amount_);
-    }
-
-    function _getWithdrawlPower(address account_) internal view returns (uint256 amount) {
-        amount = balanceOf(account_) - withdrawlReceipts[curPeriodId - 1][account_];
-    }
-
-    // Prevent tokens from being used for a withdrawl more than once per revenue period
-    // Allows transfer of tokens that have been used to withdraw funds in the current period
-    function _transfer(
-        address to_,
-        address from_,
-        uint256 amount_
-    ) internal virtual override {
-        uint256 fromWithdrawnReceipts = withdrawlReceipts[curPeriodId - 1][from_];
-
-        // 0 < withdrawlReceiptTransfer < amount_
-        uint256 withdrawlReceiptTransfer = fromWithdrawnReceipts >= amount_ ? amount_ : fromWithdrawnReceipts;
-
-        withdrawlReceipts[curPeriodId - 1][to_] += withdrawlReceiptTransfer;
-        withdrawlReceipts[curPeriodId - 1][from_] -= withdrawlReceiptTransfer;
-
-        super._transfer(from_, to_, amount_);
-    }
-
     function _setCurPeriod(uint256 date_, uint256 revenue_) internal {
         curPeriodDate = date_;
         curPeriodRevenue = revenue_;
     }
 
-    function _setLastPeriod(
-        uint256 date_,
-        uint256 revenue_,
-        uint256 totalSupply_
-    ) internal {
+    function _setLastPeriod(uint256 date_, uint256 revenue_) internal {
         lastPeriodDate = date_;
         lastPeriodRevenue = revenue_;
-        lastPeriodTotalSupply = totalSupply_;
     }
 
+    // TODO change name
     function endPeriod() external {
         require(block.timestamp >= curPeriodDate, "RevenueSplitter::endPeriod: REVENUE_PERIOD_IN_PROGRESS");
 
-        _beforeEndPeriod();
-
-        // Write to memory in order to avoid reading from storage more than once
         // Prevent setting `lastPeriodRevenue` to an amount greater than the contract owns
         uint256 endingPeriodRevenue = curPeriodRevenue > address(this).balance
             ? address(this).balance
             : curPeriodRevenue;
-        uint256 endingPeriodTotalSupply = totalSupply();
-        _setLastPeriod(curPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
-
         uint256 startingPeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
         uint256 startingPeriodId = curPeriodId + 1;
 
+        _beforeEndPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue);
+
+        _setLastPeriod(curPeriodDate, endingPeriodRevenue);
+
         _setCurPeriod(startingPeriodDate, endingPeriodRevenue);
+
         curPeriodId = startingPeriodId;
 
-        _afterEndPeriod();
+        emit StartNewPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue);
 
-        emit StartNewPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue, endingPeriodTotalSupply);
+        _afterEndPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue);
     }
 
     function execute(
@@ -337,12 +317,29 @@ contract RevenueSplitter is ERC20 {
     }
 
     receive() external payable {
-        _onReceive();
+        _onReceive(msg.value, curPeriodRevenue, curPeriodDate);
         curPeriodRevenue += msg.value;
         emit PaymentReceived(msg.sender, msg.value);
     }
 
-    // TODO setGuardian()
+    /* OVERRIDES */
+    // Prevent tokens from being used for a withdrawl more than once per revenue period
+    // by transfering withdrawl receipts from the transfer sender to the recipient.
+    function _transfer(
+        address to_,
+        address from_,
+        uint256 amount_
+    ) internal virtual override {
+        uint256 fromWithdrawnReceipts = withdrawlReceipts[curPeriodId - 1][from_];
+
+        // 0 < withdrawlReceiptTransfer < amount_
+        uint256 withdrawlReceiptTransfer = fromWithdrawnReceipts >= amount_ ? amount_ : fromWithdrawnReceipts;
+
+        withdrawlReceipts[curPeriodId - 1][to_] += withdrawlReceiptTransfer;
+        withdrawlReceipts[curPeriodId - 1][from_] -= withdrawlReceiptTransfer;
+
+        super._transfer(from_, to_, amount_);
+    }
 
     /* SETTERS */
     function setMaxTokenSupply(uint256 maxTokenSupply_) external virtual {
@@ -360,16 +357,37 @@ contract RevenueSplitter is ERC20 {
     }
 
     /* HOOKS */
-    // TODO add params to fxns
-    function _beforeTokenUnexercisedTransfer() internal virtual {}
+    function _beforeTokenGrantTransfer(
+        address from_,
+        address to_,
+        uint256 amount_,
+        uint256 vestingDate_
+    ) internal virtual {}
 
-    function _afterTokenUnexercisedTransfer() internal virtual {}
+    function _afterTokenGrantTransfer(
+        address from_,
+        address to_,
+        uint256 amount_,
+        uint256 vestingDate_
+    ) internal virtual {}
 
-    function _beforeEndPeriod() internal virtual {}
+    function _beforeEndPeriod(
+        uint256 startingPeriodId_,
+        uint256 startingPeriodDate_,
+        uint256 endingPeriodRevenue_
+    ) internal virtual {}
 
-    function _afterEndPeriod() internal virtual {}
+    function _afterEndPeriod(
+        uint256 startingPeriodId_,
+        uint256 startingPeriodDate_,
+        uint256 endingPeriodRevenue_
+    ) internal virtual {}
 
-    function _onReceive() internal virtual {}
+    function _onReceive(
+        uint256 amount_,
+        uint256 periodRevenue,
+        uint256 periodDate
+    ) internal virtual {}
 
     /* EVENTS */
     event Deposit(address indexed account, uint256 amount);
@@ -380,12 +398,7 @@ contract RevenueSplitter is ERC20 {
 
     event Redeem(address indexed account, uint256);
 
-    event StartNewPeriod(
-        uint256 indexed periodId,
-        uint256 periodEndDate,
-        uint256 periodRevenue,
-        uint256 periodTotalSupply
-    );
+    event StartNewPeriod(uint256 indexed periodId, uint256 periodEndDate, uint256 periodRevenue);
 
     event Execute(address indexed target, uint256 value, bytes);
 

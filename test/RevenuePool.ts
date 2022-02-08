@@ -105,7 +105,7 @@ describe("Unit Tests Tests", () => {
       });
     });
 
-    describe.only("withdraw", () => {
+    describe("withdraw", () => {
       let balanceBeforeWithdrawl: BigNumber;
       beforeEach(async () => {
         // TODO reduce signer count from 10 to 5
@@ -298,13 +298,8 @@ describe("Unit Tests Tests", () => {
     });
 
     describe("redeem", () => {
-      // beforeEach(async () => {
-      // });
-
       it("Should fail if options haven't been purchased", async () => {
-        await expect(pool.connect(account1).redeem()).to.be.revertedWith(
-          "RevenueSplitter::redeem: ZERO_TOKEN_PURCHASES",
-        );
+        await expect(pool.connect(account1).redeem()).to.be.revertedWith("RevenueSplitter::redeem: ZERO_TOKEN_GRANTS");
       });
 
       it("Should fail if options haven't vested yet", async () => {

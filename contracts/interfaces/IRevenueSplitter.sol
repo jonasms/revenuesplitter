@@ -52,12 +52,7 @@ interface IRevenueSplitter {
 
     event Redeem(address indexed account, uint256);
 
-    event StartNewPeriod(
-        uint256 indexed periodId,
-        uint256 periodDate,
-        uint256 periodRevenue,
-        uint256 periodTotalSupply
-    );
+    event StartNewPeriod(uint256 indexed periodId, uint256 periodDate, uint256 periodRevenue);
 
     event Execute(address indexed target, uint256 value, bytes);
 
