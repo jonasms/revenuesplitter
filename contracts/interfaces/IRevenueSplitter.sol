@@ -38,7 +38,7 @@ interface IRevenueSplitter {
         bytes32[] calldata sList_
     ) external;
 
-    function endPeriod() external;
+    function startNewPeriod() external;
 
     function setMaxTokenSupply(uint256 maxTokenSupply_) external;
 

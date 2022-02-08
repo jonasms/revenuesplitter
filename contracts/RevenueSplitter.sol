@@ -269,9 +269,8 @@ contract RevenueSplitter is ERC20 {
         lastPeriodRevenue = revenue_;
     }
 
-    // TODO change name
-    function endPeriod() external {
-        require(block.timestamp >= curPeriodDate, "RevenueSplitter::endPeriod: REVENUE_PERIOD_IN_PROGRESS");
+    function startNewPeriod() external {
+        require(block.timestamp >= curPeriodDate, "RevenueSplitter::startNewPeriod: REVENUE_PERIOD_IN_PROGRESS");
 
         // Prevent setting `lastPeriodRevenue` to an amount greater than the contract owns
         uint256 endingPeriodRevenue = curPeriodRevenue > address(this).balance
@@ -280,7 +279,7 @@ contract RevenueSplitter is ERC20 {
         uint256 startingPeriodDate = block.timestamp + REVENUE_PERIOD_DURATION;
         uint256 startingPeriodId = curPeriodId + 1;
 
-        _beforeEndPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue);
+        _beforeStartNewPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue);
 
         _setLastPeriod(curPeriodDate, endingPeriodRevenue);
 
@@ -290,7 +289,7 @@ contract RevenueSplitter is ERC20 {
 
         emit StartNewPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue);
 
-        _afterEndPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue);
+        _afterStartNewPeriod(startingPeriodId, startingPeriodDate, endingPeriodRevenue);
     }
 
     function execute(
@@ -371,13 +370,13 @@ contract RevenueSplitter is ERC20 {
         uint256 vestingDate_
     ) internal virtual {}
 
-    function _beforeEndPeriod(
+    function _beforeStartNewPeriod(
         uint256 startingPeriodId_,
         uint256 startingPeriodDate_,
         uint256 endingPeriodRevenue_
     ) internal virtual {}
 
-    function _afterEndPeriod(
+    function _afterStartNewPeriod(
         uint256 startingPeriodId_,
         uint256 startingPeriodDate_,
         uint256 endingPeriodRevenue_

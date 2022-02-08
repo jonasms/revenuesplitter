@@ -20,6 +20,7 @@ const ONE_DAY = 1000 * 60 * 60;
 const TOKEN_ID = BigNumber.from(1);
 const TOKEN_OPTION_ID = BigNumber.from(2);
 
+// TODO move helper fxns inside of test suite
 const purchaseTokens = async (pool: RevenuePool, accounts: SignerWithAddress[], amount: BigNumber) => {
   for (let i = 0; i < accounts.length; i++) {
     await pool.connect(accounts[i]).deposit({ value: amount });
@@ -33,7 +34,7 @@ const jumpPeriods = async (pool: RevenuePool, n: number, skipBlackout?: boolean)
     blackoutDuration = skipBlackout && i == n - 1 ? BLACKOUT_PERIOD : 0;
 
     await network.provider.send("evm_increaseTime", [REVENUE_PERIOD + ONE_DAY]);
-    await pool.endPeriod();
+    await pool.startNewPeriod();
     if (blackoutDuration) {
       await network.provider.send("evm_increaseTime", [blackoutDuration]);
     }
@@ -408,8 +409,6 @@ describe("Unit Tests Tests", () => {
           rList.push(r);
           sList.push(s);
         });
-
-        await pool.redeemBulk(periodDateList, vList, rList, sList);
 
         const actualBalances: BigNumber[] = [];
         for (let i = 0; i < _signers.length; i++) {
