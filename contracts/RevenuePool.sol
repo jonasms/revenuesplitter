@@ -9,10 +9,9 @@ import "./RevenueSplitter.sol";
 import "hardhat/console.sol";
 
 contract RevenuePool is RevenueSplitter {
-    uint256 private constant MAX_TOKEN_SUPPLY = 100 ether; // TODO convert to state
     uint256 private constant TSX_FEE = 10;
-    uint256 public exchangeRate; // TODO create setter
-    bool public feesEnabled; // TODO create setter
+    uint256 public exchangeRate;
+    bool public feesEnabled;
 
     constructor(
         address owner_,
@@ -26,15 +25,14 @@ contract RevenuePool is RevenueSplitter {
 
     /* PRIMARY FEATURES */
     function _deposit(address account_, uint256 amount_) internal virtual override {
-        // TODO move `getTokensLessFees()` to library
-        (uint256 amountToMint, uint256 transactionFee) = getTokensLessFees(amount_);
-        amountToMint = amountToMint / exchangeRate;
+        (uint256 amountToDeposit, uint256 transactionFee) = getTokensLessFees(amount_);
+        amountToDeposit = amountToDeposit / exchangeRate;
 
         if (transactionFee > 0) {
             RevenuePoolLibrary.transferEth(owner, transactionFee);
         }
 
-        super._deposit(account_, amount_);
+        super._deposit(account_, amountToDeposit);
     }
 
     function _transfer(
@@ -47,14 +45,13 @@ contract RevenuePool is RevenueSplitter {
         (amount_, transactionFee) = getTokensLessFees(amount_);
 
         if (transactionFee > 0) {
-            // TODO burn fee or transfer equity to owner?
             super._transfer(from_, owner, transactionFee);
         }
 
         super._transfer(from_, to_, amount_);
     }
 
-    /* HELPERS */
+    /* UTILS */
     function getTokensLessFees(uint256 amount_) internal view returns (uint256 amount, uint256 transactionFee) {
         if (feesEnabled) {
             transactionFee = (amount_ * TSX_FEE) / 1000;
@@ -74,12 +71,4 @@ contract RevenuePool is RevenueSplitter {
         require(msg.sender == owner, "RevenuePool::toggleFees: ONLY_OWNER");
         feesEnabled = !feesEnabled;
     }
-
-    // _onReceive()
-    //  - IF in first 2/3rds of period, invest capital
-
-    // _beforeEndPeriod()
-    //  - liquidate investments
-
-    // liquidate()
 }
