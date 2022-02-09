@@ -19,3 +19,19 @@ While this contract has an ever-powerful "owner", this role can be replaced by D
 3. The contract's owner can execute lists arbitrary transactions for the sake of purchasing, liquidating, and withdrawing value from assets (e.g. withdrawing revenue from LP tokens to the contract).
 
 4. The contract is extensible, enabling customization.
+
+## Notes on the Revenue/Withdrawl Schedule
+
+The complex part of this contract is the schedule by which token (share) owners can withdrawl their share of revenue.
+
+Each period is 30 days long, after which the period can be ended (and a new one started) using `startNewPeriod()`.
+
+When a period has ended, the revenues from that period can then be withdrawn by token owners.
+
+--
+
+After the first revenue period, token purchases are awarded "token grants" that vest after a further 2 revenue periods have ended. This is for the sake of decentivizing investors from purchasing shares right before hefty revenues are open for withdrawl.
+
+Once token grants have vested they are availalbe to be redeemed for tokens, which in turn can be used to withdraw corresponding proportions of revenue.
+
+The contract has a 3 day blackout period following each period's end where revenue shares cannot be withdrawn but vested token grants can be redeemed for tokens. This is to insure that token grant holders have time to redeem their tokens before revenues can be withdrawn by other token holders.
