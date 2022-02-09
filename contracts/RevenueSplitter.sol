@@ -39,7 +39,7 @@ contract RevenueSplitter is ERC20 {
     uint256 private lastPeriodRevenue;
 
     // @dev maps revenuePeriodId's to user addresses to the amount of ETH they've withdrawn in the given period
-    mapping(uint256 => mapping(address => uint256)) private withdrawlReceipts;
+    mapping(uint256 => mapping(address => uint256)) private withdrawalReceipts;
 
     constructor(
         address owner_,
@@ -114,22 +114,22 @@ contract RevenueSplitter is ERC20 {
         _deposit(msg.sender, msg.value);
     }
 
-    function _getWithdrawlPower(address account_) internal view returns (uint256 amount) {
-        amount = balanceOf(account_) - withdrawlReceipts[curPeriodId - 1][account_];
+    function _getWithdrawalPower(address account_) internal view returns (uint256 amount) {
+        amount = balanceOf(account_) - withdrawalReceipts[curPeriodId - 1][account_];
     }
 
     function _withdraw(address account_) internal virtual {
         require(!_isBlackoutPeriod(), "RevenueSplitter::_withdraw: BLACKOUT_PERIOD");
         require(lastPeriodRevenue > 0, "RevenueSplitter::_withdraw: ZERO_REVENUE");
 
-        uint256 withdrawlPower = _getWithdrawlPower(account_);
+        uint256 withdrawalPower = _getWithdrawalPower(account_);
 
-        require(withdrawlPower > 0, "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER");
+        require(withdrawalPower > 0, "RevenueSplitter::_withdraw: ZERO_Withdrawal_POWER");
 
-        uint256 share = (withdrawlPower * 10**8) / totalSupply();
+        uint256 share = (withdrawalPower * 10**8) / totalSupply();
         uint256 ethShare = share * (lastPeriodRevenue / 10**8);
 
-        withdrawlReceipts[curPeriodId - 1][account_] += withdrawlPower;
+        withdrawalReceipts[curPeriodId - 1][account_] += withdrawalPower;
         (bool success, bytes memory returnData) = account_.call{ value: ethShare }("");
         if (success) {
             emit Withdraw(account_, ethShare);
@@ -322,20 +322,20 @@ contract RevenueSplitter is ERC20 {
     }
 
     /* OVERRIDES */
-    // Prevent tokens from being used for a withdrawl more than once per revenue period
-    // by transfering withdrawl receipts from the transfer sender to the recipient.
+    // Prevent tokens from being used for a withdrawal more than once per revenue period
+    // by transfering withdrawal receipts from the transfer sender to the recipient.
     function _transfer(
         address to_,
         address from_,
         uint256 amount_
     ) internal virtual override {
-        uint256 fromWithdrawnReceipts = withdrawlReceipts[curPeriodId - 1][from_];
+        uint256 fromWithdrawnReceipts = withdrawalReceipts[curPeriodId - 1][from_];
 
-        // 0 < withdrawlReceiptTransfer < amount_
-        uint256 withdrawlReceiptTransfer = fromWithdrawnReceipts >= amount_ ? amount_ : fromWithdrawnReceipts;
+        // 0 < withdrawalReceiptTransfer < amount_
+        uint256 withdrawalReceiptTransfer = fromWithdrawnReceipts >= amount_ ? amount_ : fromWithdrawnReceipts;
 
-        withdrawlReceipts[curPeriodId - 1][to_] += withdrawlReceiptTransfer;
-        withdrawlReceipts[curPeriodId - 1][from_] -= withdrawlReceiptTransfer;
+        withdrawalReceipts[curPeriodId - 1][to_] += withdrawalReceiptTransfer;
+        withdrawalReceipts[curPeriodId - 1][from_] -= withdrawalReceiptTransfer;
 
         super._transfer(from_, to_, amount_);
     }

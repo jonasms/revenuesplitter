@@ -107,7 +107,7 @@ describe("Unit Tests Tests", () => {
     });
 
     describe("withdraw", () => {
-      let balanceBeforeWithdrawl: BigNumber;
+      let balanceBeforeWithdrawal: BigNumber;
       beforeEach(async () => {
         // TODO reduce signer count from 10 to 5
         await purchaseTokens(pool, signers.slice(0, 5), TWO_ETH);
@@ -118,14 +118,14 @@ describe("Unit Tests Tests", () => {
 
         await jumpPeriods(pool, 1, true);
 
-        balanceBeforeWithdrawl = await account1.getBalance();
+        balanceBeforeWithdrawal = await account1.getBalance();
       });
       it("Should withdraw the correct amount", async () => {
         await pool.connect(account1).withdraw();
 
-        const balanceAfterWithdrawl: BigNumber = await account1.getBalance();
+        const balanceAfterWithdrawal: BigNumber = await account1.getBalance();
 
-        const amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
+        const amountWithdrawn = balanceAfterWithdrawal.sub(balanceBeforeWithdrawal);
 
         // Should be 1 ETH less gas fees
         expect(amountWithdrawn).gte(parseEther("0.999"));
@@ -144,23 +144,23 @@ describe("Unit Tests Tests", () => {
         await jumpPeriods(pool, 1, true);
         await redeemTokens(whales);
 
-        balanceBeforeWithdrawl = await account1.getBalance();
+        balanceBeforeWithdrawal = await account1.getBalance();
 
         await pool.connect(account1).withdraw();
 
-        const balanceAfterWithdrawl: BigNumber = await account1.getBalance();
+        const balanceAfterWithdrawal: BigNumber = await account1.getBalance();
 
-        const amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
+        const amountWithdrawn = balanceAfterWithdrawal.sub(balanceBeforeWithdrawal);
 
         // Should be 1 ETH less gas fees
         expect(amountWithdrawn).gte(parseEther("0.2"));
         expect(amountWithdrawn).lt(parseEther("0.2079"));
       });
 
-      it("Withdrawing tokens more than once in a given period should result in a 'ZERO_WITHDRAWL_POWER' error", async () => {
+      it("Withdrawing tokens more than once in a given period should result in a 'ZERO_Withdrawal_POWER' error", async () => {
         await pool.connect(account1).withdraw();
         await expect(pool.connect(account1).withdraw()).to.be.revertedWith(
-          "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER",
+          "RevenueSplitter::_withdraw: ZERO_Withdrawal_POWER",
         );
       });
 
@@ -169,11 +169,11 @@ describe("Unit Tests Tests", () => {
         // Transfer token withdrawn this period
         await pool.connect(account1).transfer(account2.address, ONE_ETH);
 
-        balanceBeforeWithdrawl = await account2.getBalance();
+        balanceBeforeWithdrawal = await account2.getBalance();
         await pool.connect(account2).withdraw();
 
-        let balanceAfterWithdrawl: BigNumber = await account2.getBalance();
-        let amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
+        let balanceAfterWithdrawal: BigNumber = await account2.getBalance();
+        let amountWithdrawn = balanceAfterWithdrawal.sub(balanceBeforeWithdrawal);
 
         expect(amountWithdrawn).gte(parseEther("0.999"));
         expect(amountWithdrawn).lt(parseEther("1"));
@@ -182,8 +182,8 @@ describe("Unit Tests Tests", () => {
         await pool.connect(account3).transfer(account2.address, TWO_ETH);
 
         await pool.connect(account2).withdraw();
-        balanceAfterWithdrawl = await account2.getBalance();
-        amountWithdrawn = balanceAfterWithdrawl.sub(balanceBeforeWithdrawl);
+        balanceAfterWithdrawal = await account2.getBalance();
+        amountWithdrawn = balanceAfterWithdrawal.sub(balanceBeforeWithdrawal);
 
         expect(amountWithdrawn).gte(parseEther("1.999"));
         expect(amountWithdrawn).lt(parseEther("2.0"));
@@ -191,7 +191,7 @@ describe("Unit Tests Tests", () => {
         // account3 is expected to not be able to withdraw any revenue share
         // because they transfered all of their shares
         await expect(pool.connect(account3).withdraw()).to.be.revertedWith(
-          "RevenueSplitter::_withdraw: ZERO_WITHDRAWL_POWER",
+          "RevenueSplitter::_withdraw: ZERO_Withdrawal_POWER",
         );
       });
     });
@@ -217,7 +217,7 @@ describe("Unit Tests Tests", () => {
         const signature = await account1._signTypedData(domain, types, message);
         const { v, r, s } = ethers.utils.splitSignature(signature);
 
-        // Jumping 2 revenue periods will invalidate withdrawl requests from the
+        // Jumping 2 revenue periods will invalidate withdrawal requests from the
         // `lastPeriodDate` revenue period because that time stamp no longer the
         // represents the most recently ended revenue period.
         await jumpPeriods(pool, 2, true);
@@ -286,7 +286,7 @@ describe("Unit Tests Tests", () => {
           balancesAfterWithrawl.push(await _signers[i].getBalance());
         }
 
-        const expectedBalancesAfterWithdrawl = balancesBeforeWithrawl.map((balance, idx) => {
+        const expectedBalancesAfterWithdrawal = balancesBeforeWithrawl.map((balance, idx) => {
           // Only expect an increased balance for the first n - 1 wallets
           if (idx < balancesBeforeWithrawl.length - 1) {
             return balance.add(TWO_ETH);
@@ -294,7 +294,7 @@ describe("Unit Tests Tests", () => {
           return balance;
         });
 
-        expect(balancesAfterWithrawl).to.deep.equal(expectedBalancesAfterWithdrawl);
+        expect(balancesAfterWithrawl).to.deep.equal(expectedBalancesAfterWithdrawal);
       });
     });
 
@@ -409,6 +409,8 @@ describe("Unit Tests Tests", () => {
           rList.push(r);
           sList.push(s);
         });
+
+        await pool.redeemBulk(periodDateList, vList, rList, sList);
 
         const actualBalances: BigNumber[] = [];
         for (let i = 0; i < _signers.length; i++) {

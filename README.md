@@ -14,15 +14,15 @@ While this contract has an ever-powerful "owner", this role can be replaced by D
 
 1. The contract is ERC20 compliant and provides tokens that represent shares of the given asset. Users can purchase and transfer tokens.
 
-2. Collected revenues are made available to token owners for withdrawl, according to a schedule, via a `withdraw()` method.
+2. Collected revenues are made available to token owners for withdrawal, according to a schedule, via a `withdraw()` method.
 
 3. The contract's owner can execute lists arbitrary transactions for the sake of purchasing, liquidating, and withdrawing value from assets (e.g. withdrawing revenue from LP tokens to the contract).
 
 4. The contract is extensible, enabling customization.
 
-## Notes on the Revenue/Withdrawl Schedule
+## Notes on the Revenue/Withdrawal Schedule
 
-The complex part of this contract is the schedule by which token (share) owners can withdrawl their share of revenue.
+The complex part of this contract is the schedule by which token (share) owners can withdrawal their share of revenue.
 
 Each period is 30 days long, after which the period can be ended (and a new one started) using `startNewPeriod()`.
 
@@ -30,7 +30,7 @@ When a period has ended, the revenues from that period can then be withdrawn by 
 
 --
 
-After the first revenue period, token purchases are awarded "token grants" that vest after a further 2 revenue periods have ended. This is for the sake of decentivizing investors from purchasing shares right before hefty revenues are open for withdrawl.
+After the first revenue period, token purchases are awarded "token grants" that vest after a further 2 revenue periods have ended. This is for the sake of decentivizing investors from purchasing shares right before hefty revenues are open for withdrawal.
 
 Once token grants have vested they are availalbe to be redeemed for tokens, which in turn can be used to withdraw corresponding proportions of revenue.
 
