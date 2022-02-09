@@ -1,33 +1,21 @@
-# Mainnet Project
-
-**Estimated timeline:** 1 - 2 weeks
+# Revenue Splitter
 
 ## Description
 
-A smart contract for collective ownership of an asset and distribution of profits of said asset.
+Revenue Splitter is an extensible smart contract for splitting revenues according to shares owned.
 
-The contract has a guardian account with special privileges to execute arbitrary transactions for the contract.
+For example, a Revenue Splitter contract can facilitate multiple actors raising funds by purchasing shares (ERC20 tokens) to purchase an asset(s), such as NFTs, Liquidity Provider tokens, or "real-world" assets such as cars or real estate.
 
-The purpose of this feature is to enable the contract to invest collected revenues and liquidate said investments in order to make the funds available for withdraw.
+Revenue incurred on selling or renting out assets owned by the contract can then be distributed (withdrawn) by share owners.
 
-The given asset can be digital, physical, intellectual, etc.
+While this contract has an ever-powerful "owner", this role can be replaced by DAO governance mechanisms.
 
-In the event the asset is on-chain, the contract's guardian can make the contract the owner of the asset.
-
-## Features
+## Core Features
 
 1. The contract is ERC20 compliant and provides tokens that represent shares of the given asset. Users can purchase and transfer tokens.
-2. The contract's guardian can execute arbitrary transactions.
-3. Collected revenues are made available to token owners for withdrawl, according to a schedule, via a `withdraw()` method.
-   - Users can withdraw funds from the most recently closed collection period according to their share of tokens.
-4. Deploy the contract on Arbitrum Mainnet.
-5. Write an extensible base contract and then extend it with one of the following
-   i. A proposal system for buying/selling assets.
-   ii. A multisig for buying/selling assets.
-   iii. A white list implemented with a merkle tree.
-   iv. A way to to track revenue events on-chain, such as a streaming service reporting a number of streams, or a 3rd party reporting the use of a rented NFT
-   v. Compensate token holders not only based on the number of tokens they hold, but also for the portion of the given collection period those tokens were owned for
 
-## External Dependencies
+2. Collected revenues are made available to token owners for withdrawl, according to a schedule, via a `withdraw()` method.
 
-1. Arbitrum
+3. The contract's owner can execute lists arbitrary transactions for the sake of purchasing, liquidating, and withdrawing value from assets (e.g. withdrawing revenue from LP tokens to the contract).
+
+4. The contract is extensible, enabling customization.
