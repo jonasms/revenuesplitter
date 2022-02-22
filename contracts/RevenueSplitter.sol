@@ -4,9 +4,6 @@ pragma solidity >=0.8.4;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./interfaces/IRevenueSplitter.sol";
 
-// TODO remove
-import "hardhat/console.sol";
-
 contract RevenueSplitter is ERC20 {
     /// @notice The EIP-712 typehash for the contract's domain
     bytes32 private constant DOMAIN_TYPEHASH =
@@ -124,10 +121,9 @@ contract RevenueSplitter is ERC20 {
 
         uint256 withdrawalPower = _getWithdrawalPower(account_);
 
-        require(withdrawalPower > 0, "RevenueSplitter::_withdraw: ZERO_Withdrawal_POWER");
+        require(withdrawalPower > 0, "RevenueSplitter::_withdraw: ZERO_WITHDRAWAL_POWER");
 
-        uint256 share = (withdrawalPower * 10**8) / totalSupply();
-        uint256 ethShare = share * (lastPeriodRevenue / 10**8);
+        uint256 ethShare = (withdrawalPower * lastPeriodRevenue) / totalSupply();
 
         withdrawalReceipts[curPeriodId - 1][account_] += withdrawalPower;
         (bool success, bytes memory returnData) = account_.call{ value: ethShare }("");

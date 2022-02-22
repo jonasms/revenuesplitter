@@ -5,9 +5,6 @@ import "./interfaces/IRevenuePool.sol";
 import "./libraries/RevenuePoolLibrary.sol";
 import "./RevenueSplitter.sol";
 
-// TODO remove
-import "hardhat/console.sol";
-
 contract RevenuePool is RevenueSplitter {
     uint256 private constant TSX_FEE = 10;
     uint256 public exchangeRate;

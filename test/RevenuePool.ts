@@ -157,10 +157,10 @@ describe("Unit Tests Tests", () => {
         expect(amountWithdrawn).lt(parseEther("0.2079"));
       });
 
-      it("Withdrawing tokens more than once in a given period should result in a 'ZERO_Withdrawal_POWER' error", async () => {
+      it("Withdrawing tokens more than once in a given period should result in a 'ZERO_WITHDRAWAL_POWER' error", async () => {
         await pool.connect(account1).withdraw();
         await expect(pool.connect(account1).withdraw()).to.be.revertedWith(
-          "RevenueSplitter::_withdraw: ZERO_Withdrawal_POWER",
+          "RevenueSplitter::_withdraw: ZERO_WITHDRAWAL_POWER",
         );
       });
 
@@ -191,7 +191,7 @@ describe("Unit Tests Tests", () => {
         // account3 is expected to not be able to withdraw any revenue share
         // because they transfered all of their shares
         await expect(pool.connect(account3).withdraw()).to.be.revertedWith(
-          "RevenueSplitter::_withdraw: ZERO_Withdrawal_POWER",
+          "RevenueSplitter::_withdraw: ZERO_WITHDRAWAL_POWER",
         );
       });
     });
